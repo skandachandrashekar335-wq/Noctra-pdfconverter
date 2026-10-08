@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+/* ─── Noctra Design Tokens ───────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-base: #0c0c14;
+  --bg-surface: #12121e;
+  --bg-elevated: #1a1a2a;
+  --bg-card: #1e1e30;
+  --bg-card-hover: #242438;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Text */
+  --text-primary: #e8e8f0;
+  --text-secondary: #9898b0;
+  --text-muted: #5a5a72;
+
+  /* Brand / Accent */
+  --accent-purple: #7c6dff;
+  --accent-purple-dim: rgba(124, 109, 255, 0.15);
+  --accent-blue: #4f8fff;
+  --accent-glow: rgba(124, 109, 255, 0.3);
+
+  /* Gradients */
+  --gradient-hero: linear-gradient(135deg, #0c0c14 0%, #0e0e1c 50%, #12101e 100%);
+  --gradient-card: linear-gradient(135deg, #1a1a2a 0%, #1e1a2e 100%);
+  --gradient-accent: linear-gradient(135deg, #7c6dff 0%, #4f8fff 100%);
+
+  /* Shadows */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 40px rgba(124, 109, 255, 0.15);
+  --shadow-glow-strong: 0 0 80px rgba(124, 109, 255, 0.25);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+}
+
+/* ─── Base Reset ─────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans, 'Inter', system-ui, sans-serif);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-surface); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Selection ──────────────────────────────────────────────────────── */
+::selection {
+  background: var(--accent-purple-dim);
+  color: var(--text-primary);
+}
+
+/* ─── Focus ring ─────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 2px;
+}
+
+/* ─── Utility classes ────────────────────────────────────────────────── */
+.noctra-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.noctra-card:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-card), var(--shadow-glow);
+}
+
+.noctra-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: var(--gradient-accent);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.noctra-btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(124, 109, 255, 0.4);
+}
+.noctra-btn-primary:active { transform: translateY(0); }
+.noctra-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.noctra-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.noctra-btn-secondary:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+}
+
+.gradient-text {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
