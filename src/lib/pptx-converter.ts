@@ -32,7 +32,22 @@ export async function convertPptxToDarkMode(
   inputBuffer: ArrayBuffer,
   onProgress?: (slide: number, total: number) => void
 ): Promise<Uint8Array> {
-  const zip = await JSZip.loadAsync(inputBuffer);
+  if (inputBuffer.byteLength === 0) {
+    throw new Error("The PPTX file is empty.");
+  }
+
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(inputBuffer);
+  } catch {
+    throw new Error("The PPTX file is not a readable ZIP package.");
+  }
+
+  if (!zip.file("[Content_Types].xml") || !zip.file("ppt/presentation.xml")) {
+    throw new Error(
+      "The file is not a valid PPTX package (ppt/presentation.xml is missing)."
+    );
+  }
 
   // 1. Patch the theme file(s) — these set master slide colours
   const themeFiles = Object.keys(zip.files).filter((name) =>
@@ -54,11 +69,31 @@ export async function convertPptxToDarkMode(
 
   // 3. Patch slide layout(s)
   const layoutFiles = Object.keys(zip.files).filter((name) =>
-    /ppt\/slideLayouts\/slideLayout\d*\.xml$/.test(name)
+    /ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name)
   );
   for (const layoutFile of layoutFiles) {
-    const xml = await layoutFile ? await zip.files[layoutFile].async("string") : "";
-    if (xml) zip.file(layoutFile, patchSlideXml(xml, true));
+    const xml = await zip.files[layoutFile].async("string");
+    zip.file(layoutFile, patchSlideXml(xml, true));
+  }
+
+  // 3b. Patch charts — plot-area/shape fills and data-label text live in
+  // chart XML (c: namespace wrapping a: rich content), otherwise white
+  // chart backgrounds survive on dark slides.
+  const chartFiles = Object.keys(zip.files).filter((name) =>
+    /ppt\/charts\/chart\d+\.xml$/.test(name)
+  );
+  for (const chartFile of chartFiles) {
+    const xml = await zip.files[chartFile].async("string");
+    zip.file(chartFile, patchChartXml(xml));
+  }
+
+  // 3c. Patch speaker-notes slides (typically black-on-white text)
+  const notesFiles = Object.keys(zip.files).filter((name) =>
+    /ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name)
+  );
+  for (const notesFile of notesFiles) {
+    const xml = await zip.files[notesFile].async("string");
+    zip.file(notesFile, patchSlideXml(xml, false));
   }
 
   // 4. Patch individual slides
@@ -69,6 +104,10 @@ export async function convertPptxToDarkMode(
       const nb = parseInt(b.match(/\d+/)?.[0] || "0");
       return na - nb;
     });
+
+  if (slideFiles.length === 0) {
+    throw new Error("The PPTX package contains no slides.");
+  }
 
   for (let i = 0; i < slideFiles.length; i++) {
     onProgress?.(i + 1, slideFiles.length);
@@ -122,11 +161,21 @@ function patchThemeXml(xml: string): string {
  *  - Background colour (bg/bgPr)
  */
 function patchSlideXml(xml: string, isMaster: boolean): string {
-  // Background colour: <p:bg><p:bgPr> or <p:bgRef>
-  // Replace any explicit solid white/light background fill
-  xml = replaceSolidFillColors(xml, true);
+  // 1. Slide/master/layout background (<p:bg>) → dark page colour
+  xml = xml.replace(/<p:bg>[\s\S]*?<\/p:bg>/g, (block) =>
+    replaceSolidFillColors(block, true)
+  );
 
-  // Text colours — remap dark to light
+  // 2. Remaining shape / line / picture fills → dark surface (colourful kept)
+  xml = replaceSolidFillColors(xml, false);
+
+  // 3. Gradient stops (white gradients otherwise survive as light blobs)
+  xml = patchGradientFills(xml, false);
+
+  // 4. Text colours — MUST run after the fill passes. Explicit white text
+  //    gets darkened by step 2/3 while still inside <a:rPr>, so the text pass
+  //    recognises both original near-black and our converted dark palette and
+  //    remaps them to light text (otherwise white text would become invisible).
   xml = replaceTextColors(xml);
 
   // If it's a master slide, also patch the body text defaults
@@ -137,6 +186,34 @@ function patchSlideXml(xml: string, isMaster: boolean): string {
   return xml;
 }
 
+/** Same as patchSlideXml, minus background/master defaults — for chart parts */
+function patchChartXml(xml: string): string {
+  xml = replaceSolidFillColors(xml, false);
+  xml = patchGradientFills(xml, false);
+  xml = replaceTextColors(xml);
+  return xml;
+}
+
+/**
+ * Map a single solid-fill hex to the dark palette, or null to keep it.
+ *  - Near-white fill → dark background / surface
+ *  - Near-black fill → dark surface (never leave it invisible on dark bg)
+ *  - Colourful fills preserved unchanged
+ */
+function mapFillColor(hex: string, isBackground: boolean): string | null {
+  const { r, g, b } = hexToRgb(hex);
+  const brightness = (r + g + b) / 3;
+  const saturation = getPerceivedSaturation(r, g, b);
+
+  if (saturation < 25 && brightness > 180) {
+    return isBackground ? DARK_BG_HEX : DARK_SURFACE_HEX;
+  }
+  if (saturation < 25 && brightness < 50) {
+    return DARK_SURFACE_HEX;
+  }
+  return null;
+}
+
 /**
  * Replace solid fill colours that are near-white with our dark bg,
  * and near-black with our surface colour.
@@ -145,20 +222,25 @@ function replaceSolidFillColors(xml: string, isBackground: boolean): string {
   // Match: <a:solidFill><a:srgbClr val="RRGGBB"/></a:solidFill>
   return xml.replace(
     /<a:solidFill>\s*<a:srgbClr val="([0-9A-Fa-f]{6})"(\s*\/>|>(?:<\/a:srgbClr>)?)\s*<\/a:solidFill>/g,
-    (_match, hex) => {
-      const { r, g, b } = hexToRgb(hex);
-      const brightness = (r + g + b) / 3;
-      const saturation = getPerceivedSaturation(r, g, b);
+    (match, hex) => {
+      const mapped = mapFillColor(hex, isBackground);
+      if (!mapped) return match; // colourful / mid-tone: keep as-is
+      return `<a:solidFill><a:srgbClr val="${mapped}"/></a:solidFill>`;
+    }
+  );
+}
 
-      if (saturation < 25 && brightness > 180) {
-        // Near-white fill → dark background
-        return `<a:solidFill><a:srgbClr val="${isBackground ? DARK_BG_HEX : DARK_SURFACE_HEX}"/></a:solidFill>`;
-      } else if (saturation < 25 && brightness < 50) {
-        // Near-black fill → dark surface (avoid invisible text on dark bg)
-        return `<a:solidFill><a:srgbClr val="${DARK_SURFACE_HEX}"/></a:solidFill>`;
-      }
-      // Keep colourful fills unchanged
-      return _match;
+/**
+ * Map gradient stops (<a:gs>) with the same fill rules, so white gradients
+ * (common as subtle page/card shading) don't survive as light blobs.
+ */
+function patchGradientFills(xml: string, isBackground: boolean): string {
+  return xml.replace(
+    /<a:gs(?:\s[^>]*)?>\s*<a:srgbClr val="([0-9A-Fa-f]{6})"/g,
+    (match, hex) => {
+      const mapped = mapFillColor(hex, isBackground);
+      if (!mapped) return match;
+      return match.replace(hex, mapped);
     }
   );
 }
@@ -169,36 +251,39 @@ function replaceTextColors(xml: string): string {
   // Simple approach: replace srgbClr inside <a:solidFill> within <a:rPr> context
   return xml.replace(
     /(<a:rPr[^>]*>(?:(?!<\/a:rPr>)[\s\S])*?<a:solidFill>\s*<a:srgbClr val=")([0-9A-Fa-f]{6})(")/g,
-    (_match, prefix, hex, suffix) => {
-      const { r, g, b } = hexToRgb(hex);
-      const brightness = (r + g + b) / 3;
-      const saturation = getPerceivedSaturation(r, g, b);
-
-      if (saturation < 25 && brightness < 80) {
-        // Near-black text → off-white
+    (match, prefix, hex, suffix) => {
+      if (isTextDarkOnDark(hex)) {
+        // Near-black text, or a dark-palette colour produced by the fill
+        // pass (which also catches explicit white text that got darkened
+        // first) → off-white
         return `${prefix}${LIGHT_TEXT_HEX}${suffix}`;
       }
-      if (saturation < 25 && brightness > 200) {
-        // White text on a dark slide is fine — keep it
-        return _match;
-      }
-      return _match;
+      // White / colourful text is legible as-is — keep it
+      return match;
     }
   );
+}
+
+/** True when a text-run colour would be unreadable on the dark background */
+function isTextDarkOnDark(hex: string): boolean {
+  if (hex.toUpperCase() === DARK_BG_HEX || hex.toUpperCase() === DARK_SURFACE_HEX) {
+    return true;
+  }
+  const { r, g, b } = hexToRgb(hex);
+  const brightness = (r + g + b) / 3;
+  const saturation = getPerceivedSaturation(r, g, b);
+  return saturation < 25 && brightness < 80;
 }
 
 function patchMasterDefaults(xml: string): string {
   // Patch any defRPr (default run properties) colours
   return xml.replace(
     /(<a:defRPr[^>]*>(?:(?!<\/a:defRPr>)[\s\S])*?<a:solidFill>\s*<a:srgbClr val=")([0-9A-Fa-f]{6})(")/g,
-    (_match, prefix, hex, suffix) => {
-      const { r, g, b } = hexToRgb(hex);
-      const brightness = (r + g + b) / 3;
-      const saturation = getPerceivedSaturation(r, g, b);
-      if (saturation < 25 && brightness < 80) {
+    (match, prefix, hex, suffix) => {
+      if (isTextDarkOnDark(hex)) {
         return `${prefix}${LIGHT_TEXT_HEX}${suffix}`;
       }
-      return _match;
+      return match;
     }
   );
 }

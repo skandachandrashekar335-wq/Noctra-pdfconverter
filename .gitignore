@@ -39,3 +39,7 @@ next-env.d.ts
 # firebase service account keys
 *service-account*.json
 firebase-adminsdk*.json
+*firebase-adminsdk*.json
+
+# agent tooling artifacts — not part of the application
+.opencode/

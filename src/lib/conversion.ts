@@ -3,48 +3,47 @@
  *
  * Flow:
  *  1. Validate file type and size
- *  2. Create a Firestore conversion record (status: pending)
+ *  2. Start the history record in the background (status: pending) — the
+ *     conversion never waits on it. Any storage backend can stall or be
+ *     offline, which used to freeze the UI at 5% "Preparing…".
  *  3. Run the appropriate converter in-browser (PDF.js / JSZip)
- *  4. Update Firestore record with result / error
- *  5. Return download URL (data URL for files ≤ 10 MB, else stored externally)
+ *  4. Queue the result / error onto the history record
+ *  5. Return download URL (data URL for files ≤ 10 MB)
  *
  * Why browser-side?  Vercel's serverless functions have a 10s timeout and
  * a 4 MB request body limit for Hobby plans, both too small for real documents.
  * Running the conversion in the browser avoids both limits and keeps the
- * architecture simple — the API layer is only used for Firestore writes that
- * require server-side Firebase Admin SDK verification.
+ * architecture simple — the API layer only handles history writes, which need
+ * server-side Firebase ID-token verification.
+ *
+ * Note the deliberate absence of a `userId` argument: the owner of a history
+ * record is derived server-side from the verified Firebase token, never
+ * supplied by the client.
  */
 
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  doc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { Conversion, ConversionStatus } from "@/types";
+import { detectFileType, validateFile } from "@/lib/validation";
+import { createHistoryTracker } from "@/lib/history-tracker";
+import type { HistoryPayload, HistoryStore } from "@/lib/history-tracker";
+import { createRemoteHistoryStore } from "@/lib/history-api";
+import type { ConversionStatus } from "@/types";
 
-export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
-export const SUPPORTED_TYPES = ["application/pdf", "application/vnd.openxmlformats-officedocument.presentationml.presentation"] as const;
+// Validation helpers live in a pure module so they can be unit tested
+// without Firebase; re-exported here to preserve the public API.
+export {
+  MAX_FILE_SIZE_BYTES,
+  SUPPORTED_TYPES,
+  validateFile,
+  detectFileType,
+} from "@/lib/validation";
 
-export function validateFile(file: File): string | null {
-  if (!SUPPORTED_TYPES.includes(file.type as typeof SUPPORTED_TYPES[number])) {
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "pdf" && ext !== "pptx") {
-      return "Only PDF and PPTX files are supported.";
-    }
-  }
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    return `File exceeds the 50 MB limit (yours is ${(file.size / 1024 / 1024).toFixed(1)} MB).`;
-  }
-  return null;
-}
-
-export function detectFileType(file: File): "pdf" | "pptx" {
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (ext === "pptx") return "pptx";
-  return "pdf";
+/**
+ * Derive the output filename from the input name.
+ *
+ * Shared with the upload UI so the download attribute and the stored history
+ * metadata can never disagree.
+ */
+export function deriveOutputFileName(fileName: string): string {
+  return fileName.replace(/\.(pdf|docx|pptx)$/i, "-dark.$1");
 }
 
 export interface ConversionCallbacks {
@@ -52,61 +51,77 @@ export interface ConversionCallbacks {
   onProgress?: (page: number, total: number) => void;
   onComplete?: (outputDataUrl: string, conversionId: string) => void;
   onError?: (error: string) => void;
+  /**
+   * Called when the conversion succeeded but its history record could not be
+   * saved. Deliberately separate from `onError`: the download is fine, only
+   * the saved history is missing, and saying "conversion failed" would be a
+   * lie.
+   */
+  onHistoryError?: (message: string) => void;
+}
+
+/** Injectable collaborators, for tests only. */
+export interface ConversionDeps {
+  /**
+   * Overrides the history backend. Passing `null` disables history entirely;
+   * leaving it undefined uses the real Supabase-backed store. Tests use this
+   * to simulate a backend that never settles — the original "stuck at 5%"
+   * bug — without needing a live database.
+   */
+  historyStore?: HistoryStore | null;
 }
 
 export async function runConversion(
   file: File,
-  userId: string,
-  callbacks: ConversionCallbacks = {}
+  callbacks: ConversionCallbacks = {},
+  deps: ConversionDeps = {}
 ): Promise<void> {
-  const { onStatusChange, onProgress, onComplete, onError } = callbacks;
+  const { onStatusChange, onProgress, onComplete, onError, onHistoryError } =
+    callbacks;
+
+  const validationError = validateFile(file);
+  if (validationError) {
+    onError?.(validationError);
+    return;
+  }
 
   const fileType = detectFileType(file);
 
-  // 1. Create Firestore record
-  let conversionId: string;
-  try {
-    const record: Omit<Conversion, "id"> = {
-      userId,
+  // History is best-effort and must NEVER block the conversion. The tracker
+  // starts creation in the background and serialises status writes behind it,
+  // so a slow or absent backend cannot stall the UI.
+  const history = createHistoryTracker(
+    deps.historyStore === undefined ? createRemoteHistoryStore() : deps.historyStore,
+    {
       originalFileName: file.name,
       originalFileSize: file.size,
       fileType,
       status: "pending",
-      createdAt: Date.now(),
-    };
-    const docRef = await addDoc(collection(db, "conversions"), {
-      ...record,
-      createdAtServer: serverTimestamp(),
-    });
-    conversionId = docRef.id;
-  } catch (e) {
-    const msg = "Failed to create conversion record. Check your connection.";
-    onError?.(msg);
-    return;
-  }
+    },
+    // Surface history problems to the UI, but only once per conversion —
+    // a failing backend would otherwise fire on every queued status write.
+    (() => {
+      let reported = false;
+      return (message: string) => {
+        if (reported) return;
+        reported = true;
+        console.warn(message);
+        onHistoryError?.(message);
+      };
+    })()
+  );
 
-  // Helper to update Firestore status
-  async function updateStatus(
+  // Helper to update UI status and queue the matching history write.
+  function updateStatus(
     status: ConversionStatus,
-    extra: Partial<Conversion> = {}
+    extra: HistoryPayload = {}
   ) {
     onStatusChange?.(status);
-    try {
-      await updateDoc(doc(db, "conversions", conversionId), {
-        status,
-        ...extra,
-        ...(status === "completed" || status === "failed"
-          ? { completedAt: Date.now() }
-          : {}),
-      });
-    } catch {
-      // Non-fatal: status update failed but conversion can still proceed
-      console.warn("Firestore status update failed:", status);
-    }
+    history.submit(status, extra);
   }
 
   try {
-    await updateStatus("processing");
+    updateStatus("processing");
 
     // 2. Read file as ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
@@ -123,7 +138,7 @@ export async function runConversion(
         onProgress?.(page, total);
       });
       outputMimeType = "application/pdf";
-    } else {
+    } else if (fileType === "pptx") {
       const { convertPptxToDarkMode } = await import("@/lib/pptx-converter");
       outputBytes = await convertPptxToDarkMode(
         arrayBuffer,
@@ -134,10 +149,17 @@ export async function runConversion(
       );
       outputMimeType =
         "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    } else {
+      const { convertDocxToDarkMode } = await import("@/lib/docx-converter");
+      outputBytes = await convertDocxToDarkMode(arrayBuffer, (part, total) => {
+        onProgress?.(part, total);
+      });
+      outputMimeType =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     }
 
-    // 4. Convert to data URL for download
-    // For large outputs we keep it in memory only (not stored in Firestore)
+    // 4. Convert to blob URL for download. Kept in memory only — document
+    //    binaries are never stored in the history table.
     // Slice to a plain ArrayBuffer to satisfy Blob's BlobPart type constraint
     const outputBuffer = outputBytes.buffer.slice(
       outputBytes.byteOffset,
@@ -146,11 +168,13 @@ export async function runConversion(
     const blob = new Blob([outputBuffer], { type: outputMimeType });
     const outputDataUrl = URL.createObjectURL(blob);
 
-    // Store minimal metadata in Firestore (not the binary — too large)
-    await updateStatus("completed", {
+    // Record minimal metadata in history (not the binary — too large).
+    // The id may not exist yet if creation was slow; the payload function
+    // receives it once known, so fields derived from it still land correctly.
+    const conversionId = history.currentId() ?? "local-pending";
+    updateStatus("completed", {
       pageCount,
-      // Store a flag so the dashboard knows it's ready for download
-      outputDownloadUrl: "client-blob:" + conversionId,
+      outputFileName: deriveOutputFileName(file.name),
     });
 
     onComplete?.(outputDataUrl, conversionId);
@@ -158,7 +182,7 @@ export async function runConversion(
     const msg =
       error instanceof Error ? error.message : "Conversion failed unexpectedly.";
     console.error("Conversion error:", error);
-    await updateStatus("failed", { errorMessage: msg });
+    updateStatus("failed", { errorMessage: msg });
     onError?.(msg);
   }
 }

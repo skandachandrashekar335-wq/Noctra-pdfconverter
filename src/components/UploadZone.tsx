@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   runConversion,
   validateFile,
+  deriveOutputFileName,
   MAX_FILE_SIZE_BYTES,
 } from "@/lib/conversion";
 import { ConversionStatus } from "@/types";
@@ -26,11 +27,27 @@ interface UploadState {
   error?: string;
   outputUrl?: string;
   outputFileName?: string;
+  /**
+   * Set when the conversion succeeded but its history record could not be
+   * saved. Kept strictly separate from `error`: the download works, so this
+   * must never read as a conversion failure.
+   */
+  historyError?: string;
 }
 
-export function UploadZone() {
+interface UploadZoneProps {
+  /**
+   * Called after a conversion settles (success or failure). The dashboard
+   * uses it to bump the history list's refresh token, so a finished
+   * conversion shows up without polling or a reload.
+   */
+  onConversionSettled?: () => void;
+}
+
+export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const iconRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<UploadState>({ phase: "idle", progress: 0 });
 
   const processFile = useCallback(
@@ -45,7 +62,7 @@ export function UploadZone() {
       }
 
       const ext = file.name.split(".").pop()?.toLowerCase();
-      const outputName = file.name.replace(/\.(pdf|pptx)$/i, "-dark.$1");
+      const outputName = deriveOutputFileName(file.name);
 
       setState({
         phase: "processing",
@@ -55,7 +72,7 @@ export function UploadZone() {
         progressLabel: "Preparing…",
       });
 
-      await runConversion(file, user.uid, {
+      await runConversion(file, {
         onStatusChange: (status: ConversionStatus) => {
           if (status === "processing") {
             setState((s) => ({
@@ -73,6 +90,8 @@ export function UploadZone() {
             progressLabel:
               ext === "pptx"
                 ? `Processing slide ${page} of ${total}…`
+                : ext === "docx"
+                  ? `Updating document part ${page} of ${total}…`
                 : `Converting page ${page} of ${total}…`,
           }));
         },
@@ -86,6 +105,9 @@ export function UploadZone() {
             outputUrl: outputDataUrl,
             outputFileName: outputName,
           });
+          // The record may still be settling server-side; a short delay lets
+          // the final status land before the list refetches.
+          onConversionSettled?.();
         },
         onError: (error) => {
           setState((s) => ({
@@ -94,11 +116,55 @@ export function UploadZone() {
             error,
             progress: 0,
           }));
+          onConversionSettled?.();
+        },
+        // History problems are advisory: keep the finished download on
+        // screen and attach a calm note rather than an error card.
+        onHistoryError: (message) => {
+          setState((s) => ({
+            ...s,
+            historyError:
+              "Your conversion finished, but it could not be added to your history. " +
+              message,
+          }));
         },
       });
     },
-    [user]
+    [user, onConversionSettled]
   );
+
+  // ─── Drag feedback (small, decorative only) ────────────────────────────
+  useEffect(() => {
+    if (state.phase !== "dragover") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let cancelled = false;
+    let anim: { revert: () => void } | null = null;
+
+    (async () => {
+      try {
+        const { animate } = await import("animejs");
+        if (cancelled || !iconRef.current) return;
+        anim = animate(iconRef.current, {
+          scale: [1, 1.1, 1],
+          rotate: [0, -5, 5, 0],
+          duration: 520,
+          ease: "outQuad",
+        });
+      } catch {
+        /* animation is decorative — ignore bundle/load failures */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try {
+        anim?.revert();
+      } catch {
+        /* element may already be unmounted */
+      }
+    };
+  }, [state.phase]);
 
   // ─── Drag-and-drop handlers ───────────────────────────────────────────
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -144,19 +210,19 @@ export function UploadZone() {
           onClick={() => fileInputRef.current?.click()}
           role="button"
           tabIndex={0}
-          aria-label="Upload a PDF or PPTX file"
+           aria-label="Upload a PDF, DOCX or PPTX file"
           onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
         >
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+             accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             onChange={handleFileInput}
             className="sr-only"
             aria-hidden="true"
           />
 
-          <div className="drop-icon" aria-hidden="true">
+          <div className="drop-icon" aria-hidden="true" ref={iconRef}>
             {state.phase === "dragover" ? <DropActiveIcon /> : <UploadIcon />}
           </div>
 
@@ -170,7 +236,7 @@ export function UploadZone() {
               or <span className="drop-link">browse to upload</span>
             </p>
             <p className="drop-hint">
-              PDF · PPTX &nbsp;·&nbsp; up to{" "}
+               PDF · DOCX · PPTX &nbsp;·&nbsp; up to{" "}
               {MAX_FILE_SIZE_BYTES / 1024 / 1024} MB
             </p>
           </div>
@@ -179,7 +245,7 @@ export function UploadZone() {
 
       {/* ── Processing ── */}
       {state.phase === "processing" && (
-        <div className="progress-card" role="status" aria-live="polite">
+        <div className="panel progress-card" role="status" aria-live="polite">
           <div className="prog-file-info">
             <FileIcon ext={state.fileName?.split(".").pop() ?? "pdf"} />
             <div className="prog-file-meta">
@@ -199,18 +265,24 @@ export function UploadZone() {
             />
           </div>
 
-          <p className="prog-label">{state.progressLabel}</p>
+          <div className="prog-foot">
+            <p className="prog-label">{state.progressLabel}</p>
+            <p className="prog-pct">{state.progress}%</p>
+          </div>
+
           <p className="prog-note">
-            Converting in your browser — no upload needed.
+             Transforming in your browser — no upload needed. DOCX remains editable; PDF export is not performed here.
           </p>
         </div>
       )}
 
       {/* ── Done ── */}
       {state.phase === "done" && state.outputUrl && (
-        <div className="done-card">
+        <div className="panel done-card">
           <div className="done-header">
-            <CheckIcon />
+            <span className="done-badge" aria-hidden="true">
+              <CheckIcon />
+            </span>
             <div>
               <p className="done-title">Conversion complete</p>
               <p className="done-sub">{state.fileName}</p>
@@ -230,14 +302,25 @@ export function UploadZone() {
               Convert another
             </button>
           </div>
+
+          {/* Advisory only — the conversion above genuinely succeeded, so
+              this is a note, not an alert, and never role="alert". */}
+          {state.historyError && (
+            <p className="done-history-note">
+              <HistoryNoteIcon />
+              <span>{state.historyError}</span>
+            </p>
+          )}
         </div>
       )}
 
       {/* ── Error ── */}
       {state.phase === "error" && (
-        <div className="error-card" role="alert">
-          <ErrorIcon />
-          <div>
+        <div className="panel error-card" role="alert">
+          <span className="error-badge" aria-hidden="true">
+            <ErrorIcon />
+          </span>
+          <div className="error-body">
             <p className="error-title">Something went wrong</p>
             <p className="error-msg">{state.error}</p>
           </div>
@@ -252,143 +335,270 @@ export function UploadZone() {
           width: 100%;
         }
 
-        /* Drop zone */
+        /* ── Drop zone ── */
         .drop-zone {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 16px;
-          padding: 56px 32px;
-          border: 2px dashed var(--border-default);
+          gap: 24px;
+          padding: clamp(48px, 8vw, 80px) 24px;
+          min-height: 320px;
+          border: 1px solid var(--border-default);
           border-radius: var(--radius-xl);
           background: var(--bg-surface);
           cursor: pointer;
-          transition: border-color 200ms ease, background 200ms ease,
-            transform 200ms ease;
-          min-height: 260px;
+          text-align: center;
+          transition: border-color var(--transition-base),
+            background var(--transition-base);
         }
-        .drop-zone:hover,
+        .drop-zone:hover {
+          border-color: var(--border-strong);
+        }
         .drop-zone.dragover {
           border-color: var(--accent-purple);
           background: var(--accent-purple-dim);
-          transform: scale(1.01);
         }
         .drop-icon {
-          width: 56px;
-          height: 56px;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: var(--accent-purple-dim);
-          border-radius: 16px;
+          width: 64px;
+          height: 64px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-pill);
+          color: var(--text-primary);
+          transition: border-color var(--transition-base),
+            color var(--transition-base),
+            background var(--transition-base);
+        }
+        .drop-zone.dragover .drop-icon {
+          border-color: var(--accent-purple);
           color: var(--accent-purple);
+          background: transparent;
         }
         .drop-title {
-          font-size: 1.125rem;
-          font-weight: 600;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(1.25rem, 2.6vw, 1.75rem);
+          line-height: 1;
+          letter-spacing: -0.04em;
+          text-transform: uppercase;
           color: var(--text-primary);
           text-align: center;
         }
         .drop-sub {
+          margin-top: 12px;
+          font-size: 0.9375rem;
           color: var(--text-secondary);
           text-align: center;
-          margin-top: 4px;
         }
         .drop-link {
           color: var(--accent-purple);
           text-decoration: underline;
-          text-decoration-style: dotted;
+          text-decoration-style: solid;
           text-underline-offset: 3px;
         }
         .drop-hint {
+          margin-top: 18px;
+          padding-top: 16px;
+          border-top: 1px solid var(--border-hairline);
           color: var(--text-muted);
-          font-size: 0.8125rem;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
           text-align: center;
-          margin-top: 8px;
-        }
-
-        /* Progress card */
-        .progress-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-xl);
-          padding: 32px;
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-        .prog-file-info {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-        }
-        .prog-file-meta { flex: 1; min-width: 0; }
-        .prog-filename {
-          font-weight: 600;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .prog-size { font-size: 0.8125rem; color: var(--text-muted); }
-        .prog-bar-wrap {
           width: 100%;
-          height: 6px;
-          background: var(--border-subtle);
-          border-radius: 3px;
-          overflow: hidden;
+          max-width: 280px;
+          margin-inline: auto;
         }
-        .prog-bar-fill {
-          height: 100%;
-          background: var(--gradient-accent);
-          border-radius: 3px;
-          transition: width 300ms ease;
-        }
-        .prog-label {
-          font-weight: 500;
-          color: var(--accent-purple);
-          font-size: 0.875rem;
-        }
-        .prog-note { font-size: 0.8125rem; color: var(--text-muted); }
 
-        /* Done card */
-        .done-card {
-          background: var(--bg-card);
-          border: 1px solid rgba(124, 109, 255, 0.25);
+        /* ── Shared panel ── */
+        .panel {
+          background: var(--bg-surface);
+          border: 1px solid var(--border-default);
           border-radius: var(--radius-xl);
-          padding: 32px;
+          padding: clamp(24px, 4vw, 36px);
+        }
+
+        /* ── Progress ── */
+        .progress-card {
           display: flex;
           flex-direction: column;
           gap: 24px;
         }
+        .prog-file-info {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+        .prog-file-meta {
+          flex: 1;
+          min-width: 0;
+        }
+        .prog-filename {
+          font-family: var(--font-display);
+          font-weight: 600;
+          font-size: 1.0625rem;
+          letter-spacing: -0.03em;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .prog-size {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          margin-top: 4px;
+        }
+        .prog-bar-wrap {
+          width: 100%;
+          height: 3px;
+          background: var(--border-subtle);
+          overflow: hidden;
+        }
+        .prog-bar-fill {
+          height: 100%;
+          background: var(--accent-purple);
+          transition: width 300ms ease;
+        }
+        .prog-foot {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        .prog-label {
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--text-primary);
+        }
+        .prog-pct {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 0.875rem;
+          letter-spacing: -0.02em;
+          color: var(--accent-purple);
+          font-variant-numeric: tabular-nums;
+        }
+        .prog-note {
+          font-size: 0.8125rem;
+          line-height: 1.5;
+          color: var(--text-muted);
+          padding-top: 20px;
+          border-top: 1px solid var(--border-hairline);
+        }
+
+        /* ── Done ── */
+        .done-card {
+          display: flex;
+          flex-direction: column;
+          gap: 28px;
+        }
         .done-header {
           display: flex;
           align-items: center;
-          gap: 14px;
+          gap: 16px;
         }
-        .done-title { font-weight: 600; font-size: 1.0625rem; }
-        .done-sub { color: var(--text-secondary); font-size: 0.875rem; margin-top: 2px; }
+        .done-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 40px;
+          height: 40px;
+          flex-shrink: 0;
+          border: 1px solid var(--accent-ok);
+          border-radius: var(--radius-pill);
+          color: var(--accent-ok);
+        }
+        .done-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 1.125rem;
+          letter-spacing: -0.04em;
+          text-transform: uppercase;
+          color: var(--text-primary);
+        }
+        .done-sub {
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          margin-top: 4px;
+        }
         .done-actions {
           display: flex;
           gap: 12px;
           flex-wrap: wrap;
         }
-        .done-download { flex: 1; justify-content: center; min-width: 180px; }
-        .done-new { flex: 0 0 auto; }
+        .done-download {
+          flex: 1;
+          justify-content: center;
+          min-width: 200px;
+        }
+        .done-new {
+          flex: 0 0 auto;
+        }
+        .done-history-note {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          margin: 0;
+          padding: 10px 12px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-sm);
+          background: var(--bg-elevated);
+          font-size: 0.75rem;
+          line-height: 1.5;
+          color: var(--text-muted);
+        }
+        .done-history-note svg {
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
 
-        /* Error card */
+        /* ── Error ── */
         .error-card {
-          background: var(--bg-card);
-          border: 1px solid rgba(248, 113, 113, 0.2);
-          border-radius: var(--radius-xl);
-          padding: 32px;
           display: flex;
           align-items: flex-start;
           gap: 16px;
+          flex-wrap: wrap;
+          border-color: var(--accent-bad);
         }
-        .error-title { font-weight: 600; color: #f87171; }
-        .error-msg { color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px; }
-        .error-retry { margin-left: auto; flex-shrink: 0; }
+        .error-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 40px;
+          height: 40px;
+          flex-shrink: 0;
+          border: 1px solid var(--accent-bad);
+          border-radius: var(--radius-pill);
+          color: var(--accent-bad);
+        }
+        .error-body {
+          flex: 1;
+          min-width: 200px;
+        }
+        .error-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 1.0625rem;
+          letter-spacing: -0.04em;
+          text-transform: uppercase;
+          color: var(--accent-bad);
+        }
+        .error-msg {
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          line-height: 1.55;
+          margin-top: 6px;
+        }
+        .error-retry {
+          flex-shrink: 0;
+        }
       `}</style>
     </div>
   );
@@ -406,7 +616,17 @@ function formatSize(bytes: number): string {
 
 function UploadIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="17 8 12 3 7 8" />
       <line x1="12" y1="3" x2="12" y2="15" />
@@ -416,7 +636,17 @@ function UploadIcon() {
 
 function DropActiveIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M12 2l10 10-10 10L2 12z" />
       <path d="M12 8v8" />
     </svg>
@@ -424,23 +654,24 @@ function DropActiveIcon() {
 }
 
 function FileIcon({ ext }: { ext: string }) {
-  const colour = ext === "pptx" ? "#f97316" : "#4f8fff";
   return (
-    <div style={{
-      width: 44,
-      height: 44,
-      background: `${colour}18`,
-      borderRadius: 10,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: colour,
-      fontSize: "0.6875rem",
-      fontWeight: 700,
-      letterSpacing: "0.05em",
-      textTransform: "uppercase",
-      flexShrink: 0,
-    }}>
+    <div
+      style={{
+        width: 44,
+        height: 44,
+        border: "1px solid var(--border-default)",
+        borderRadius: "var(--radius-sm)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "var(--text-secondary)",
+        fontSize: "0.6875rem",
+        fontWeight: 700,
+        letterSpacing: "0.05em",
+        textTransform: "uppercase",
+        flexShrink: 0,
+      }}
+    >
       {ext}
     </div>
   );
@@ -448,27 +679,35 @@ function FileIcon({ ext }: { ext: string }) {
 
 function CheckIcon() {
   return (
-    <div style={{
-      width: 44,
-      height: 44,
-      background: "rgba(52, 211, 153, 0.1)",
-      borderRadius: "50%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: "#34d399",
-      flexShrink: 0,
-    }}>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-    </div>
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }
 
 function DownloadIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="15" x2="12" y2="3" />
@@ -476,24 +715,42 @@ function DownloadIcon() {
   );
 }
 
+function HistoryNoteIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
 function ErrorIcon() {
   return (
-    <div style={{
-      width: 44,
-      height: 44,
-      background: "rgba(248, 113, 113, 0.1)",
-      borderRadius: "50%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: "#f87171",
-      flexShrink: 0,
-    }}>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="15" y1="9" x2="9" y2="15" />
-        <line x1="9" y1="9" x2="15" y2="15" />
-      </svg>
-    </div>
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
   );
 }

@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ── User profiles ────────────────────────────────────────────────
+    match /users/{userId} {
+      // The app only ever reads a single profile by ID (getDoc on
+      // users/{uid}); it never lists the collection. Scoping to `get`
+      // rather than `read` (= get + list) keeps the surface minimal.
+      allow get: if request.auth != null && request.auth.uid == userId;
+      // No client-side listing of user profiles.
+      allow list: if false;
+      // Create/update/delete are owner-only. `uid` is pinned to the path so a
+      // profile can never claim to belong to someone else.
+      allow create, update, delete: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId;
+    }
+
+    // ── Conversions ──────────────────────────────────────────────────
+    match /conversions/{conversionId} {
+      // Read is owner-only. This covers both single reads and the history
+      // query: Firestore evaluates the rule against each document a query
+      // would return, so the client's where("userId", "==", uid) clause is
+      // provably safe here — and any doc whose userId does not match the
+      // caller is denied even if the client asks for it.
+      allow get, list: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+
+      // A conversion must be stamped with the creator's own uid at write
+      // time. userId is also required to be a string, so a doc can't be
+      // created with a null/absent owner that would then be unreadable.
+      allow create: if request.auth != null
+        && request.resource.data.userId is string
+        && request.auth.uid == request.resource.data.userId;
+
+      // Owner may update, but must not move the record to another user.
+      // (Split from `delete` below: `request.resource` is null on delete,
+      // so combining them would make the guard un-evaluable and silently
+      // deny all deletes.)
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.userId
+        && request.resource.data.userId == resource.data.userId;
+
+      // Owner may delete their own record.
+      allow delete: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+    }
+  }
+}

@@ -1,787 +1,2064 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
-import Link from "next/link";
+import { getLandingCtaMode } from "@/lib/landing-cta";
 
-export default function LandingPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const heroRef = useRef<HTMLDivElement>(null);
-  const featuresRef = useRef<HTMLElement>(null);
-  const stepsRef = useRef<HTMLElement>(null);
+/* ──────────────────────────────────────────────────────────────────────────
+   Shared data — every claim below maps to code that exists in this repo
+   (src/lib/pdf-converter.ts, pptx-converter.ts, pdf-text-layer.ts,
+   validation.ts, conversion.ts).
+   ────────────────────────────────────────────────────────────────────────── */
 
-  // Redirect authenticated users straight to dashboard
-  useEffect(() => {
-    if (!loading && user) {
-      router.replace("/dashboard");
-    }
-  }, [user, loading, router]);
+const NAV_LINKS = [
+  { href: "#philosophy", label: "Philosophy" },
+  { href: "#showcase", label: "Showcase" },
+  { href: "#features", label: "Features" },
+];
 
-  // Anime.js entrance animations
-  useEffect(() => {
-    if (loading) return;
-    let cleanup: (() => void) | undefined;
-
-    (async () => {
-      const { animate, onScroll } = await import("animejs");
-
-      // Hero entrance
-      animate(".hero-eyebrow", {
-        opacity: [0, 1],
-        translateY: [20, 0],
-        duration: 700,
-        delay: 100,
-        easing: "easeOutQuart",
-      });
-      animate(".hero-headline", {
-        opacity: [0, 1],
-        translateY: [30, 0],
-        duration: 800,
-        delay: 250,
-        easing: "easeOutQuart",
-      });
-      animate(".hero-sub", {
-        opacity: [0, 1],
-        translateY: [20, 0],
-        duration: 700,
-        delay: 450,
-        easing: "easeOutQuart",
-      });
-      animate(".hero-cta", {
-        opacity: [0, 1],
-        translateY: [20, 0],
-        duration: 600,
-        delay: 600,
-        easing: "easeOutQuart",
-      });
-      animate(".hero-visual", {
-        opacity: [0, 1],
-        translateY: [40, 0],
-        scale: [0.97, 1],
-        duration: 900,
-        delay: 700,
-        easing: "easeOutQuart",
-      });
-
-      // Scroll-reveal for feature cards
-      const featureCards = document.querySelectorAll(".feature-card");
-      featureCards.forEach((card, i) => {
-        let triggered = false;
-        onScroll({
-          target: card as HTMLElement,
-          enter: "bottom 90%",
-          onEnter: () => {
-            if (triggered) return;
-            triggered = true;
-            animate(card, {
-              opacity: [0, 1],
-              translateY: [30, 0],
-              duration: 600,
-              delay: i * 80,
-              easing: "easeOutQuart",
-            });
-          },
-        });
-      });
-
-      // Scroll-reveal for step items
-      const stepItems = document.querySelectorAll(".step-item");
-      stepItems.forEach((item, i) => {
-        let triggered = false;
-        onScroll({
-          target: item as HTMLElement,
-          enter: "bottom 90%",
-          onEnter: () => {
-            if (triggered) return;
-            triggered = true;
-            animate(item, {
-              opacity: [0, 1],
-              translateX: [-20, 0],
-              duration: 550,
-              delay: i * 100,
-              easing: "easeOutQuart",
-            });
-          },
-        });
-      });
-    })();
-
-    return cleanup;
-  }, [loading]);
-
-  return (
-    <div className="landing">
-      {/* ── Navbar ────────────────────────────────────────────── */}
-      <nav className="navbar" role="navigation" aria-label="Main navigation">
-        <Link href="/" className="nav-logo" aria-label="Noctra home">
-          <NoctraLogo />
-        </Link>
-        <div className="nav-actions">
-          {!loading && !user && (
-            <button
-              className="nav-signin-btn"
-              onClick={() => document.getElementById("hero-cta")?.scrollIntoView({ behavior: "smooth" })}
-            >
-              Sign in
-            </button>
-          )}
-        </div>
-      </nav>
-
-      {/* ── Hero ──────────────────────────────────────────────── */}
-      <section className="hero" ref={heroRef} aria-label="Hero">
-        {/* Ambient glow */}
-        <div className="hero-glow" aria-hidden="true" />
-        <div className="hero-glow hero-glow-2" aria-hidden="true" />
-
-        <div className="hero-content">
-          <p className="hero-eyebrow">Dark mode document converter</p>
-
-          <h1 className="hero-headline">
-            Your documents were never{" "}
-            <span className="gradient-text">designed for dark mode.</span>
-            <br />
-            Noctra was.
-          </h1>
-
-          <p className="hero-sub">
-            Upload a PDF or PowerPoint. Noctra intelligently transforms it into
-            a comfortable dark-mode version — preserving your text, diagrams,
-            and images.
-          </p>
-
-          <div className="hero-cta" id="hero-cta">
-            {!loading && !user ? (
-              <div className="hero-cta-inner">
-                <GoogleSignInButton label="Get started free — Sign in with Google" />
-                <p className="hero-cta-note">No account setup · No credit card</p>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Before/after visual */}
-          <div className="hero-visual" aria-hidden="true">
-            <BeforeAfterVisual />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Flow steps ────────────────────────────────────────── */}
-      <section className="steps-section" ref={stepsRef} aria-label="How it works">
-        <div className="section-inner">
-          <p className="section-eyebrow">How it works</p>
-          <h2 className="section-title">Four steps to dark mode</h2>
-
-          <div className="steps-grid">
-            {STEPS.map((step, i) => (
-              <div className="step-item" key={step.label}>
-                <div className="step-num" aria-hidden="true">{i + 1}</div>
-                <div className="step-icon" aria-hidden="true">{step.icon}</div>
-                <h3 className="step-label">{step.label}</h3>
-                <p className="step-desc">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Features ──────────────────────────────────────────── */}
-      <section className="features-section" ref={featuresRef} aria-label="Features">
-        <div className="section-inner">
-          <p className="section-eyebrow">What makes Noctra different</p>
-          <h2 className="section-title">Intelligent, not destructive</h2>
-          <p className="section-sub">
-            Most dark-mode hacks just invert every pixel. Noctra analyses your
-            document and transforms each element type appropriately.
-          </p>
-
-          <div className="features-grid">
-            {FEATURES.map((f) => (
-              <div className="feature-card" key={f.title}>
-                <div className="feature-icon" aria-hidden="true">{f.icon}</div>
-                <h3 className="feature-title">{f.title}</h3>
-                <p className="feature-desc">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Supported formats ─────────────────────────────────── */}
-      <section className="formats-section" aria-label="Supported formats">
-        <div className="section-inner formats-inner">
-          <div className="format-badge">
-            <PDFIcon />
-            <span>PDF</span>
-          </div>
-          <div className="formats-arrow" aria-hidden="true">→</div>
-          <div className="format-badge">
-            <PPTXIcon />
-            <span>PPTX</span>
-          </div>
-          <div className="formats-text">
-            <h2 className="formats-headline">
-              Two formats, one conversion engine
-            </h2>
-            <p className="formats-sub">
-              Upload study PDFs or lecture slides in PowerPoint format.
-              Both get the same intelligent dark-mode treatment.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Bottom CTA ────────────────────────────────────────── */}
-      <section className="bottom-cta" aria-label="Call to action">
-        <div className="section-inner bottom-cta-inner">
-          <h2 className="bottom-cta-title">
-            Study comfortably in the dark.
-          </h2>
-          <p className="bottom-cta-sub">
-            Join students who study without straining their eyes.
-          </p>
-          {!loading && !user && (
-            <div className="bottom-cta-btn">
-              <GoogleSignInButton label="Start converting — it's free" />
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ── Footer ────────────────────────────────────────────── */}
-      <footer className="footer">
-        <div className="footer-inner">
-          <NoctraLogo />
-          <p className="footer-copy">
-            © 2026 Noctra. Built for students.
-          </p>
-        </div>
-      </footer>
-
-      {/* ── Styles ────────────────────────────────────────────── */}
-      <style jsx>{`
-        .landing {
-          min-height: 100vh;
-          background: var(--bg-base);
-          color: var(--text-primary);
-        }
-
-        /* Navbar */
-        .navbar {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 100;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 18px 40px;
-          background: rgba(12, 12, 20, 0.8);
-          backdrop-filter: blur(16px);
-          border-bottom: 1px solid var(--border-subtle);
-        }
-        .nav-logo { text-decoration: none; }
-        .nav-signin-btn {
-          padding: 8px 20px;
-          background: transparent;
-          border: 1px solid var(--border-default);
-          border-radius: 8px;
-          color: var(--text-primary);
-          font-size: 0.875rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: background 150ms, border-color 150ms;
-        }
-        .nav-signin-btn:hover {
-          background: var(--bg-elevated);
-          border-color: var(--border-strong);
-        }
-
-        /* Hero */
-        .hero {
-          position: relative;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          overflow: hidden;
-          padding: 120px 40px 80px;
-        }
-        .hero-glow {
-          position: absolute;
-          width: 600px;
-          height: 600px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(124, 109, 255, 0.12) 0%, transparent 70%);
-          top: 5%;
-          left: -10%;
-          pointer-events: none;
-        }
-        .hero-glow-2 {
-          background: radial-gradient(circle, rgba(79, 143, 255, 0.08) 0%, transparent 70%);
-          top: 30%;
-          right: -5%;
-        }
-        .hero-content {
-          max-width: 760px;
-          margin: 0 auto;
-          text-align: center;
-          position: relative;
-          z-index: 1;
-        }
-        .hero-eyebrow {
-          font-size: 0.8125rem;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: var(--accent-purple);
-          margin-bottom: 20px;
-          opacity: 0;
-        }
-        .hero-headline {
-          font-size: clamp(2rem, 5vw, 3.5rem);
-          font-weight: 800;
-          line-height: 1.12;
-          letter-spacing: -0.03em;
-          margin-bottom: 24px;
-          opacity: 0;
-        }
-        .hero-sub {
-          font-size: 1.125rem;
-          color: var(--text-secondary);
-          line-height: 1.7;
-          max-width: 580px;
-          margin: 0 auto 36px;
-          opacity: 0;
-        }
-        .hero-cta { opacity: 0; }
-        .hero-cta-inner {
-          max-width: 360px;
-          margin: 0 auto;
-        }
-        .hero-cta-note {
-          font-size: 0.8125rem;
-          color: var(--text-muted);
-          margin-top: 10px;
-          text-align: center;
-        }
-        .hero-visual {
-          margin-top: 64px;
-          opacity: 0;
-        }
-
-        /* Section base */
-        .section-inner {
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 0 40px;
-        }
-        .section-eyebrow {
-          font-size: 0.8125rem;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: var(--accent-purple);
-          margin-bottom: 12px;
-        }
-        .section-title {
-          font-size: clamp(1.5rem, 3vw, 2.25rem);
-          font-weight: 700;
-          letter-spacing: -0.02em;
-          margin-bottom: 16px;
-        }
-        .section-sub {
-          color: var(--text-secondary);
-          max-width: 560px;
-          line-height: 1.7;
-          margin-bottom: 48px;
-        }
-
-        /* Steps */
-        .steps-section {
-          padding: 100px 0;
-          border-top: 1px solid var(--border-subtle);
-        }
-        .steps-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 32px;
-          margin-top: 48px;
-        }
-        .step-item {
-          position: relative;
-          padding: 28px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          opacity: 0;
-        }
-        .step-num {
-          position: absolute;
-          top: 16px;
-          right: 20px;
-          font-size: 2rem;
-          font-weight: 800;
-          color: var(--border-default);
-          line-height: 1;
-        }
-        .step-icon {
-          width: 44px;
-          height: 44px;
-          background: var(--accent-purple-dim);
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--accent-purple);
-          margin-bottom: 20px;
-        }
-        .step-label {
-          font-size: 1rem;
-          font-weight: 600;
-          margin-bottom: 8px;
-        }
-        .step-desc {
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          line-height: 1.6;
-        }
-
-        /* Features */
-        .features-section {
-          padding: 100px 0;
-          border-top: 1px solid var(--border-subtle);
-        }
-        .features-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 20px;
-        }
-        .feature-card {
-          padding: 28px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          transition: border-color 200ms, box-shadow 200ms;
-          opacity: 0;
-        }
-        .feature-card:hover {
-          border-color: var(--border-default);
-          box-shadow: var(--shadow-glow);
-        }
-        .feature-icon {
-          width: 44px;
-          height: 44px;
-          background: var(--accent-purple-dim);
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--accent-purple);
-          margin-bottom: 18px;
-        }
-        .feature-title {
-          font-size: 1rem;
-          font-weight: 600;
-          margin-bottom: 8px;
-        }
-        .feature-desc {
-          font-size: 0.875rem;
-          color: var(--text-secondary);
-          line-height: 1.6;
-        }
-
-        /* Formats */
-        .formats-section {
-          padding: 100px 0;
-          border-top: 1px solid var(--border-subtle);
-        }
-        .formats-inner {
-          display: flex;
-          align-items: center;
-          gap: 32px;
-          flex-wrap: wrap;
-        }
-        .format-badge {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 20px 28px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-default);
-          border-radius: var(--radius-lg);
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: var(--text-primary);
-        }
-        .formats-arrow {
-          font-size: 1.5rem;
-          color: var(--text-muted);
-        }
-        .formats-text { flex: 1; min-width: 280px; }
-        .formats-headline {
-          font-size: 1.5rem;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-          margin-bottom: 10px;
-        }
-        .formats-sub {
-          color: var(--text-secondary);
-          line-height: 1.7;
-        }
-
-        /* Bottom CTA */
-        .bottom-cta {
-          padding: 120px 0;
-          border-top: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
-        }
-        .bottom-cta-inner {
-          text-align: center;
-        }
-        .bottom-cta-title {
-          font-size: clamp(1.75rem, 4vw, 2.75rem);
-          font-weight: 800;
-          letter-spacing: -0.03em;
-          margin-bottom: 16px;
-        }
-        .bottom-cta-sub {
-          color: var(--text-secondary);
-          font-size: 1.0625rem;
-          margin-bottom: 36px;
-        }
-        .bottom-cta-btn {
-          max-width: 360px;
-          margin: 0 auto;
-        }
-
-        /* Footer */
-        .footer {
-          border-top: 1px solid var(--border-subtle);
-          padding: 32px 40px;
-        }
-        .footer-inner {
-          max-width: 1100px;
-          margin: 0 auto;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        .footer-copy {
-          font-size: 0.875rem;
-          color: var(--text-muted);
-        }
-
-        /* Mobile */
-        @media (max-width: 640px) {
-          .navbar { padding: 14px 20px; }
-          .hero { padding: 100px 20px 60px; }
-          .section-inner { padding: 0 20px; }
-          .formats-inner { flex-direction: column; align-items: flex-start; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// ─── Before/After visual ──────────────────────────────────────────────────
-
-function BeforeAfterVisual() {
-  return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "1fr auto 1fr",
-      gap: "16px",
-      alignItems: "center",
-      maxWidth: 680,
-      margin: "0 auto",
-    }}>
-      {/* Before */}
-      <div style={{
-        background: "#f8f8fc",
-        borderRadius: 12,
-        padding: "20px",
-        border: "1px solid #e0e0e0",
-      }}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ff5f57" }} />
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ffbd2e" }} />
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#28ca42" }} />
-        </div>
-        <div style={{ background: "#1a1a2a", height: 10, borderRadius: 4, marginBottom: 8, width: "60%" }} />
-        <div style={{ background: "#333", height: 8, borderRadius: 4, marginBottom: 6, width: "100%" }} />
-        <div style={{ background: "#333", height: 8, borderRadius: 4, marginBottom: 6, width: "85%" }} />
-        <div style={{ background: "#333", height: 8, borderRadius: 4, marginBottom: 14, width: "92%" }} />
-        <div style={{ background: "#e8e8ff", height: 60, borderRadius: 6, border: "1px solid #d0d0f0" }} />
-        <p style={{ color: "#aaa", fontSize: "0.75rem", marginTop: 10, textAlign: "center" }}>Before</p>
-      </div>
-
-      {/* Arrow */}
-      <div style={{ color: "var(--accent-purple)", fontSize: "1.5rem" }}>→</div>
-
-      {/* After */}
-      <div style={{
-        background: "#12121e",
-        borderRadius: 12,
-        padding: "20px",
-        border: "1px solid rgba(124, 109, 255, 0.3)",
-        boxShadow: "0 0 30px rgba(124, 109, 255, 0.1)",
-      }}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ff5f57" }} />
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ffbd2e" }} />
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#28ca42" }} />
-        </div>
-        <div style={{ background: "#a0a0ff", height: 10, borderRadius: 4, marginBottom: 8, width: "60%" }} />
-        <div style={{ background: "#c8c8d8", height: 8, borderRadius: 4, marginBottom: 6, width: "100%" }} />
-        <div style={{ background: "#c8c8d8", height: 8, borderRadius: 4, marginBottom: 6, width: "85%" }} />
-        <div style={{ background: "#c8c8d8", height: 8, borderRadius: 4, marginBottom: 14, width: "92%" }} />
-        <div style={{ background: "#1e1e30", height: 60, borderRadius: 6, border: "1px solid rgba(124,109,255,0.25)" }} />
-        <p style={{ color: "#5a5a72", fontSize: "0.75rem", marginTop: 10, textAlign: "center" }}>After · Noctra</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Data ─────────────────────────────────────────────────────────────────
-
-const STEPS = [
+const PRINCIPLES = [
   {
-    label: "Upload",
-    desc: "Drag and drop your PDF or PowerPoint. No size limits that matter for real documents.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
-      </svg>
-    ),
+    index: "01",
+    title: "Preserve",
+    body: "Keep diagrams, photos, and important visual information readable.",
   },
   {
-    label: "Analyse",
-    desc: "Noctra inspects each page, identifying text, backgrounds, images, and diagrams.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-    ),
+    index: "02",
+    title: "Transform",
+    body: "Adapt backgrounds and text for a dark reading experience.",
   },
   {
-    label: "Transform",
-    desc: "Text and backgrounds become dark-mode. Images and diagrams stay visually intact.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><line x1="2" y1="12" x2="22" y2="12" />
-      </svg>
-    ),
-  },
-  {
-    label: "Download",
-    desc: "Get your transformed document instantly. No waiting, no emails, no account required.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-      </svg>
-    ),
+    index: "03",
+    title: "Keep control",
+    body: "Download the converted file yourself — nothing is kept for you.",
   },
 ];
 
 const FEATURES = [
   {
-    title: "Smart background detection",
-    desc: "White and near-white backgrounds are replaced with our carefully tuned dark palette — not a simple invert.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
-      </svg>
-    ),
+    geo: "square",
+    title: "Intelligent document conversion",
+    body: "Pages are rendered at 2× and transformed by pixel classification — text, fills, and low-saturation shapes are remapped, not blanket-inverted.",
+    cta: "Convert a document",
   },
   {
-    title: "Text readability preserved",
-    desc: "Dark text becomes off-white. The contrast ratio stays high so you can read comfortably.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" /><line x1="12" y1="4" x2="12" y2="20" />
-      </svg>
-    ),
+    geo: "stack",
+    title: "Editable PPTX conversion",
+    body: "Slides are patched at the XML level, so your presentation stays fully editable in PowerPoint after the dark theme is applied.",
+    cta: "Convert a deck",
   },
   {
-    title: "Images stay recognisable",
-    desc: "Photos, diagrams, charts, and screenshots are protected. They're dimmed slightly but never inverted or destroyed.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
-      </svg>
-    ),
+    geo: "ring",
+    title: "Editable DOCX conversion",
+    body: "Word packages are patched structurally, preserving editable text, styles, equations, relationships and original media where supported.",
+    cta: "Convert a document",
   },
   {
-    title: "PPTX stays editable",
-    desc: "PowerPoint conversions are structural — the XML is patched, not rasterised. Your slides remain fully editable.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-      </svg>
-    ),
+    geo: "ring",
+    title: "Image-aware transformation",
+    body: "Photographs, diagrams, charts, and screenshots are preserved and only slightly dimmed, so they stay visually useful.",
+    cta: "See the showcase",
+    href: "#showcase",
   },
   {
-    title: "All processing in your browser",
-    desc: "Your documents never leave your device. No server upload, no privacy risk.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      </svg>
-    ),
+    geo: "grid",
+    title: "Local browser processing",
+    body: "PDF.js and JSZip do the work on your device. Your document is never sent to a conversion server.",
+    cta: "Read the workflow",
+    href: "#philosophy",
   },
   {
-    title: "Reduced-motion aware",
-    desc: "All animations respect your system's reduced-motion preference. No strobing, no distraction.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" /><path d="M12 8v4l3 3" />
-      </svg>
-    ),
+    geo: "lines",
+    title: "Searchable PDF output",
+    body: "Converted PDFs carry an invisible text layer, so the result stays selectable, searchable, and copy-pasteable.",
+    cta: "Convert a PDF",
+  },
+  {
+    geo: "link",
+    title: "Hyperlinks preserved",
+    body: "External links, mailto links, and internal page jumps are rebuilt as real PDF link annotations — not flattened into pixels.",
+    cta: "Convert a PDF",
   },
 ];
 
-// ─── Inline SVG icons ─────────────────────────────────────────────────────
+const FOOTER_NAV = [
+  { href: "#philosophy", label: "Philosophy" },
+  { href: "#showcase", label: "Showcase" },
+  { href: "#features", label: "Features" },
+];
 
-function NoctraLogo() {
-  return (
-    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <rect width="32" height="32" rx="8" fill="url(#logo-grad-lp)" />
-        <path d="M8 24L16 8L24 24" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M10.5 19H21.5" stroke="white" strokeWidth="2" strokeLinecap="round" />
-        <defs>
-          <linearGradient id="logo-grad-lp" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#7C6DFF" /><stop offset="1" stopColor="#4F8FFF" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <span style={{ fontWeight: 700, fontSize: "1.125rem", letterSpacing: "-0.01em", color: "var(--text-primary)" }}>
-        Noctra
-      </span>
-    </span>
-  );
-}
+const FOOTER_PRODUCT = [
+  { href: "#features", label: "Supported formats" },
+];
 
-function PDFIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4f8fff" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
-    </svg>
-  );
-}
+/* ──────────────────────────────────────────────────────────────────────────
+   Page
+   ────────────────────────────────────────────────────────────────────────── */
 
-function PPTXIcon() {
+export default function LandingPage() {
+  const { user, loading, error, configError } = useAuth();
+  const router = useRouter();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [copyrightYear, setCopyrightYear] = useState("");
+  const [authRedirectPending, setAuthRedirectPending] = useState(false);
+
+  // The button may unmount as soon as AuthProvider observes the new user. Keep
+  // the redirect state in this public page so successful sign-in cannot lose
+  // its navigation effect during that render transition.
+  useEffect(() => {
+    if (authRedirectPending && user) router.push("/dashboard");
+  }, [authRedirectPending, router, user]);
+
+  const handleAuthSuccess = useCallback(() => {
+    setAuthRedirectPending(true);
+  }, []);
+
+  useEffect(() => {
+    // Deferred to a timer callback: the year is read client-side only, so the
+    // static prerender never sees `new Date()`, and no state update happens
+    // synchronously inside the effect body.
+    const id = window.setTimeout(
+      () => setCopyrightYear(String(new Date().getFullYear())),
+      0
+    );
+    return () => window.clearTimeout(id);
+  }, []);
+
+  // Close the mobile menu when the viewport grows past the breakpoint.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 900px)");
+    const onChange = () => {
+      if (mq.matches) setMenuOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  /* Anime.js v4 entrance + scroll choreography.
+     Everything created here is pushed into `disposables` and reverted on
+     unmount; `cancelled` prevents a late dynamic import from touching a
+     component that is no longer mounted. */
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    // Respect the user's motion preference — CSS keeps the reveal elements
+    // fully visible when reduce is requested.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let cancelled = false;
+    const disposables: Array<{ revert: () => void }> = [];
+
+    // Fail-safe: if the animation bundle can't load, show everything.
+    const revealAll = () => {
+      root
+        .querySelectorAll<HTMLElement>("[data-hero], [data-reveal], [data-echo]")
+        .forEach((el) => {
+          el.style.opacity = "1";
+        });
+      root.querySelectorAll<HTMLElement>("[data-clip]").forEach((el) => {
+        el.style.clipPath = "none";
+      });
+    };
+
+    // Second fail-safe: if the engine stalls (throttled rAF in a background
+    // tab, a thrown render, …) nothing may ever reach its end state. The hero
+    // animates immediately on load, so if it is still hidden when the timer
+    // fires the engine never ticked — reveal everything, including the
+    // attribute-driven clip state. If the hero revealed normally, the engine
+    // is alive and scroll reveals are left to run on their own.
+    const failsafe = window.setTimeout(() => {
+      if (cancelled) return;
+      const hero = root.querySelector<HTMLElement>("[data-hero]");
+      if (!hero || parseFloat(getComputedStyle(hero).opacity) >= 0.99) return;
+      root
+        .querySelectorAll<HTMLElement>("[data-hero], [data-reveal], [data-echo]")
+        .forEach((el) => {
+          el.style.opacity = "1";
+          el.style.transform = "";
+        });
+      root.querySelectorAll<HTMLElement>("[data-clip]").forEach((el) => {
+        el.style.clipPath = "none";
+      });
+    }, 6000);
+
+    (async () => {
+      try {
+        const { animate, onScroll, stagger, cubicBezier } = await import(
+          "animejs"
+        );
+        if (cancelled) return;
+
+        const editorialEase = cubicBezier(0.77, 0, 0.175, 1);
+
+        /* ── Hero entrance ──────────────────────────────────────────── */
+        const heroTargets = Array.from(
+          root.querySelectorAll<HTMLElement>("[data-hero]")
+        );
+        if (heroTargets.length) {
+          disposables.push(
+            animate(heroTargets, {
+              opacity: [0, 1],
+              translateY: [26, 0],
+              duration: 720,
+              delay: stagger(80),
+              ease: "outQuart",
+            })
+          );
+        }
+
+        /* ── Typographic echo stack reveal ──────────────────────────── */
+        const echoes = Array.from(
+          root.querySelectorAll<HTMLElement>("[data-echo]")
+        );
+        if (echoes.length) {
+          disposables.push(
+            animate(echoes, {
+              opacity: [0, 1],
+              translateX: [-14, 0],
+              duration: 900,
+              delay: stagger(70),
+              ease: editorialEase,
+            })
+          );
+        }
+
+        /* ── Section entrances + image clip-path reveals ────────────── */
+        const revealables = Array.from(
+          root.querySelectorAll<HTMLElement>("[data-reveal]")
+        );
+
+        revealables.forEach((el, i) => {
+          const isClip = el.hasAttribute("data-clip");
+          const inViewNow =
+            el.getBoundingClientRect().top < window.innerHeight * 0.92;
+
+          const run = (delay = 0) => {
+            disposables.push(
+              animate(el, {
+                opacity: [0, 1],
+                translateY: isClip ? [0, 0] : [30, 0],
+                ...(isClip
+                  ? { clipPath: ["inset(0 0 100% 0)", "inset(0 0 0% 0)"] }
+                  : {}),
+                duration: 700,
+                delay,
+                ease: editorialEase,
+                onComplete: () => {
+                  // Release the reveal attributes so hover transitions and the
+                  // resting clip state are not held hostage by the entry styles.
+                  el.removeAttribute("data-reveal");
+                  el.removeAttribute("data-clip");
+                  el.style.clipPath = "none";
+                },
+              })
+            );
+          };
+
+          if (inViewNow) {
+            run(i * 60);
+          } else {
+            let fired = false;
+            disposables.push(
+              onScroll({
+                target: el,
+                enter: "bottom 90%",
+                onEnter: () => {
+                  if (fired || cancelled) return;
+                  fired = true;
+                  run(0);
+                },
+              })
+            );
+          }
+        });
+      } catch (err) {
+        console.error("Animation init failed:", err);
+        if (!cancelled) revealAll();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(failsafe);
+      disposables.forEach((d) => {
+        try {
+          d.revert();
+        } catch {
+          /* observer already torn down */
+        }
+      });
+    };
+  }, []);
+
+  const ctaMode = getLandingCtaMode(loading, Boolean(user));
+  const signedIn = ctaMode === "authenticated";
+  const authMessage = error ?? configError;
+
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-    </svg>
+    <div className="landing" ref={rootRef}>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <header className="site-header">
+        <div className="shell header-inner">
+          <a href="#top" className="wordmark" aria-label="Noctra — back to top">
+            <Image
+              src="/noctra-logo.png"
+              alt=""
+              width={30}
+              height={30}
+              className="wordmark-icon"
+              priority
+            />
+            <span>NOCTRA</span>
+          </a>
+
+          <nav className="nav-desktop" aria-label="Primary">
+            {NAV_LINKS.map((l) => (
+              <a key={l.href} href={l.href} className="nav-link">
+                {l.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="header-actions">
+            {ctaMode === "resolving-session" ? (
+              <span
+                className="pill-cta pill-cta--pending"
+                role="status"
+                aria-live="polite"
+              >
+                Checking session…
+              </span>
+            ) : ctaMode === "authenticated" ? (
+              <Link href="/dashboard" className="pill-cta">
+                Get started
+              </Link>
+            ) : (
+              <GoogleSignInButton
+                label="Get started"
+                variant="compact"
+                showError={false}
+                onSuccess={handleAuthSuccess}
+              />
+            )}
+            <button
+              type="button"
+              className="menu-toggle"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              <span className="menu-toggle-bars" aria-hidden="true">
+                <span />
+                <span />
+              </span>
+              <span className="sr-only">
+                {menuOpen ? "Close menu" : "Open menu"}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="mobile-nav"
+          className={`mobile-nav ${menuOpen ? "is-open" : ""}`}
+          hidden={!menuOpen}
+        >
+          <nav aria-label="Mobile">
+            {NAV_LINKS.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                className="mobile-nav-link"
+                onClick={() => setMenuOpen(false)}
+              >
+                {l.label}
+              </a>
+            ))}
+            {ctaMode === "resolving-session" ? (
+              <span
+                className="mobile-nav-link mobile-nav-link--cta"
+                role="status"
+                aria-live="polite"
+              >
+                Checking session…
+              </span>
+            ) : ctaMode === "authenticated" ? (
+              <Link
+                href="/dashboard"
+                className="mobile-nav-link mobile-nav-link--cta"
+                onClick={() => setMenuOpen(false)}
+              >
+                Open dashboard
+              </Link>
+            ) : (
+              <GoogleSignInButton
+                label="Sign in with Google"
+                variant="nav"
+                showError={false}
+                onStart={() => setMenuOpen(false)}
+                onSuccess={handleAuthSuccess}
+              />
+            )}
+          </nav>
+        </div>
+      </header>
+
+      <main id="main">
+        {/* ── Hero ─────────────────────────────────────────────────────── */}
+        <section className="hero" id="top" aria-labelledby="hero-title">
+          <div className="shell hero-inner">
+            <p className="hero-eyebrow" data-hero>
+              Dark mode for study documents
+            </p>
+
+            {/* Typographic Echo Stack — the four background layers are pure
+                decoration: aria-hidden, pointer-events none, and the headline
+                itself below is the only text a screen reader receives. */}
+            <div className="hero-lockup">
+              <div className="echo-stack" aria-hidden="true">
+                <span className="echo echo--1" data-echo>
+                  YOUR DOCUMENTS
+                  <br />
+                  WERE NEVER DESIGNED
+                  <br />
+                  FOR DARK MODE.
+                </span>
+                <span className="echo echo--2" data-echo>
+                  YOUR DOCUMENTS
+                  <br />
+                  WERE NEVER DESIGNED
+                  <br />
+                  FOR DARK MODE.
+                </span>
+                <span className="echo echo--3" data-echo>
+                  YOUR DOCUMENTS
+                  <br />
+                  WERE NEVER DESIGNED
+                  <br />
+                  FOR DARK MODE.
+                </span>
+                <span className="echo echo--4" data-echo>
+                  YOUR DOCUMENTS
+                  <br />
+                  WERE NEVER DESIGNED
+                  <br />
+                  FOR DARK MODE.
+                </span>
+              </div>
+
+              <h1 className="hero-title" id="hero-title" data-hero>
+                YOUR DOCUMENTS
+                <br />
+                WERE NEVER DESIGNED
+                <br />
+                FOR DARK MODE.
+              </h1>
+            </div>
+
+            <p className="hero-sub" data-hero>
+              <span className="hero-sub-lead">NOCTRA WAS.</span>{" "}
+               Bright study documents, transformed into comfortable
+              dark-mode versions — in your browser, on your device.
+            </p>
+
+            <div className="hero-actions" id="hero-cta" data-hero>
+              {ctaMode === "resolving-session" ? (
+                <span
+                  className="pill-cta pill-cta--solid pill-cta--pending"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Checking session…
+                </span>
+              ) : signedIn ? (
+                <Link href="/dashboard" className="pill-cta pill-cta--solid">
+                  Transform your documents
+                </Link>
+              ) : (
+                <GoogleSignInButton
+                  label="Transform your documents"
+                  className="hero-cta-inner"
+                  showError={false}
+                  onSuccess={handleAuthSuccess}
+                />
+              )}
+              <a href="#philosophy" className="text-cta">
+                See how it works
+                <span className="text-cta-arrow" aria-hidden="true">
+                  ↓
+                </span>
+              </a>
+              {authMessage && (
+                <p
+                  className="landing-auth-feedback"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  {authMessage}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Philosophy ───────────────────────────────────────────────── */}
+        <section
+          className="philosophy"
+          id="philosophy"
+          aria-labelledby="philosophy-title"
+        >
+          <div className="shell">
+            <div className="hairline" aria-hidden="true" data-reveal />
+
+            <div className="philosophy-head">
+              <p className="section-label" data-reveal>
+                The principle
+              </p>
+              <h2 className="philosophy-title" id="philosophy-title" data-reveal>
+                Less glare.
+                <br />
+                More <span className="serif-em">focus</span>.
+              </h2>
+              <p className="philosophy-lead" data-reveal>
+                Your study material should work with your eyes, not against
+                them.
+              </p>
+            </div>
+
+            <div className="hairline" aria-hidden="true" data-reveal />
+
+            <ul className="principle-grid">
+              {PRINCIPLES.map((p) => (
+                <li key={p.title} className="principle" data-reveal>
+                  <span className="principle-index" aria-hidden="true">
+                    {p.index}
+                  </span>
+                  <h3 className="principle-title">{p.title}</h3>
+                  <p className="principle-body">{p.body}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* ── Product showcase ─────────────────────────────────────────── */}
+        <section
+          className="showcase"
+          id="showcase"
+          aria-labelledby="showcase-title"
+        >
+          <div className="shell">
+            <div className="section-head">
+              <div>
+                <p className="section-label" data-reveal>
+                  The product
+                </p>
+                <h2 className="section-title" id="showcase-title" data-reveal>
+                  What Noctra
+                  <br />
+                  actually does
+                </h2>
+              </div>
+              <p className="section-note" data-reveal>
+                Built from the real converter — no stock photography, no mockups.
+              </p>
+            </div>
+
+            <div className="showcase-grid">
+              {/* Large landscape: bright original vs dark transformed */}
+              <article className="sc-card sc-card--wide" data-clip data-reveal>
+                <div className="sc-media">
+                  <div className="doc-split">
+                    <figure className="doc-page doc-page--light">
+                      <div className="doc-page-tag">Bright original</div>
+                      <div className="doc-hline doc-hline--title" />
+                      <div className="doc-hline" />
+                      <div className="doc-hline doc-hline--short" />
+                      <div className="doc-chart" aria-hidden="true">
+                        <span style={{ height: "38%" }} />
+                        <span style={{ height: "72%" }} />
+                        <span style={{ height: "54%" }} />
+                        <span style={{ height: "88%" }} />
+                      </div>
+                      <div className="doc-hline" />
+                      <div className="doc-hline doc-hline--short" />
+                    </figure>
+
+                    <div className="doc-arrow" aria-hidden="true">
+                      <span />
+                    </div>
+
+                    <figure className="doc-page doc-page--dark">
+                      <div className="doc-page-tag">Dark transformed</div>
+                      <div className="doc-hline doc-hline--title" />
+                      <div className="doc-hline" />
+                      <div className="doc-hline doc-hline--short" />
+                      <div className="doc-chart" aria-hidden="true">
+                        <span style={{ height: "38%" }} />
+                        <span style={{ height: "72%" }} />
+                        <span style={{ height: "54%" }} />
+                        <span style={{ height: "88%" }} />
+                      </div>
+                      <div className="doc-hline" />
+                      <div className="doc-hline doc-hline--short" />
+                    </figure>
+                  </div>
+                </div>
+                <div className="sc-body">
+                  <h3 className="sc-title">Bright in. Dark out.</h3>
+                  <p className="sc-text">
+                    The same document before and after — backgrounds remapped,
+                    layout untouched.
+                  </p>
+                </div>
+              </article>
+
+              {/* Tall pill: image & diagram preservation */}
+              <article className="sc-card sc-card--pill" data-clip data-reveal>
+                <div className="sc-media sc-media--tall">
+                  <div className="diagram" aria-hidden="true">
+                    <div className="diagram-orbit">
+                      <span className="diagram-node diagram-node--a" />
+                      <span className="diagram-node diagram-node--b" />
+                      <span className="diagram-node diagram-node--c" />
+                      <span className="diagram-core" />
+                    </div>
+                    <div className="diagram-plot">
+                      <span style={{ height: "44%" }} />
+                      <span style={{ height: "78%" }} />
+                      <span style={{ height: "60%" }} />
+                      <span style={{ height: "92%" }} />
+                      <span style={{ height: "52%" }} />
+                    </div>
+                    <div className="diagram-caption">figure 3 — pipeline</div>
+                  </div>
+                </div>
+                <div className="sc-body">
+                  <h3 className="sc-title">Images &amp; diagrams preserved</h3>
+                  <p className="sc-text">
+                    Photographs, charts, and screenshots are dimmed — never
+                    inverted.
+                  </p>
+                </div>
+              </article>
+
+              {/* Circular: formats */}
+              <article className="sc-card sc-card--circle" data-clip data-reveal>
+                <div className="sc-media sc-media--circle">
+                  <div className="format-wheel" aria-hidden="true">
+                    <span className="format-chip">PDF</span>
+                    <span className="format-divider" />
+                    <span className="format-chip">DOCX</span>
+                    <span className="format-chip">PPTX</span>
+                  </div>
+                </div>
+                <div className="sc-body sc-body--center">
+                  <h3 className="sc-title">Two formats</h3>
+                  <p className="sc-text">
+                     PDF, DOCX or PPTX in. One dark-mode result out.
+                  </p>
+                </div>
+              </article>
+
+              {/* Wide landscape: text layer + links */}
+              <article className="sc-card sc-card--band" data-clip data-reveal>
+                <div className="sc-media">
+                  <div className="textlayer" aria-hidden="true">
+                    <p className="textlayer-line">
+                      Chapter 4 — <mark>selectable, searchable text</mark>
+                    </p>
+                    <p className="textlayer-line textlayer-line--muted">
+                      The invisible text layer keeps every page copy-pasteable.
+                    </p>
+                    <p className="textlayer-line">
+                      <span className="textlayer-link">
+                        Read the source reference
+                      </span>
+                      <span className="textlayer-link textlayer-link--internal">
+                        jump to page 12
+                      </span>
+                    </p>
+                    <div className="textlayer-selection" />
+                  </div>
+                </div>
+                <div className="sc-body">
+                  <h3 className="sc-title">Real text. Live links.</h3>
+                  <p className="sc-text">
+                    Hyperlinks and internal jumps are rebuilt as PDF
+                    annotations, so navigation survives the conversion.
+                  </p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Features ─────────────────────────────────────────────────── */}
+        <section
+          className="features"
+          id="features"
+          aria-labelledby="features-title"
+        >
+          <div className="shell">
+            <div className="section-head">
+              <div>
+                <p className="section-label" data-reveal>
+                  Capabilities
+                </p>
+                <h2 className="section-title" id="features-title" data-reveal>
+                  Everything the
+                  <br />
+                  converter really does
+                </h2>
+              </div>
+              <a href="#hero-cta" className="text-cta text-cta--standalone" data-reveal>
+                Start converting
+                <span className="text-cta-arrow" aria-hidden="true">
+                  ↗
+                </span>
+              </a>
+            </div>
+
+            <ul className="feature-grid">
+              {FEATURES.map((f) => (
+                <li key={f.title} className="feature-card" data-reveal>
+                  <span
+                    className={`geo geo--${f.geo}`}
+                    aria-hidden="true"
+                  >
+                    <span className="geo-mark" />
+                  </span>
+                  <h3 className="feature-title">{f.title}</h3>
+                  <p className="feature-body">{f.body}</p>
+                  <a
+                    href={f.href ?? (signedIn ? "/dashboard" : "#hero-cta")}
+                    className="feature-link"
+                    aria-label={`${f.cta} — ${f.title}`}
+                  >
+                    <span className="feature-link-label">{f.cta}</span>
+                    <span className="feature-arrow" aria-hidden="true">
+                      ↗
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* ── Closing CTA ──────────────────────────────────────────────── */}
+        <section className="closing" aria-labelledby="closing-title">
+          <div className="shell closing-inner">
+            <p className="section-label section-label--light" data-reveal>
+              Ready when you are
+            </p>
+            <h2 className="closing-title" id="closing-title" data-reveal>
+              Turn the lights down.
+              <br />
+              Keep reading.
+            </h2>
+            <div className="closing-actions" data-reveal>
+              {ctaMode === "resolving-session" ? (
+                <span
+                  className="pill-cta pill-cta--invert pill-cta--pending"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Checking session…
+                </span>
+              ) : signedIn ? (
+                <Link href="/dashboard" className="pill-cta pill-cta--invert">
+                  Transform your documents
+                </Link>
+              ) : (
+                <GoogleSignInButton
+                  label="Transform your documents"
+                  className="closing-cta-inner"
+                  variant="invert"
+                  showError={false}
+                  onSuccess={handleAuthSuccess}
+                />
+              )}
+              <a href="#features" className="text-cta text-cta--invert">
+                Review the features
+                <span className="text-cta-arrow" aria-hidden="true">
+                  ↑
+                </span>
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <footer className="site-footer">
+        <div className="shell footer-grid">
+          <div className="footer-brand">
+            <span className="footer-wordmark">NOCTRA</span>
+            <p className="footer-desc">
+               Dark mode for study documents. Bright PDFs, Word documents and PowerPoints are
+              transformed locally in your browser — text, diagrams, images, and
+              links intact.
+            </p>
+          </div>
+
+          <nav className="footer-col" aria-label="Footer — sections">
+            <h2 className="footer-heading">Sections</h2>
+            <ul>
+              {FOOTER_NAV.map((l) => (
+                <li key={l.href}>
+                  <a href={l.href}>{l.label}</a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <nav className="footer-col" aria-label="Footer — product">
+            <h2 className="footer-heading">Product</h2>
+            <ul>
+              <li>
+                {ctaMode === "resolving-session" ? (
+                  <span
+                    className="footer-auth-pending"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    Checking session…
+                  </span>
+                ) : signedIn ? (
+                  <Link href="/dashboard">Open the converter</Link>
+                ) : (
+                  <GoogleSignInButton
+                    label="Open the converter"
+                    variant="footer"
+                    showError={false}
+                    onSuccess={handleAuthSuccess}
+                  />
+                )}
+              </li>
+              <li>
+                {ctaMode === "resolving-session" ? (
+                  <span
+                    className="footer-auth-pending"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    Checking session…
+                  </span>
+                ) : signedIn ? (
+                  <Link href="/dashboard">Account dashboard</Link>
+                ) : (
+                  <GoogleSignInButton
+                    label="Sign in with Google"
+                    variant="footer"
+                    showError={false}
+                    onSuccess={handleAuthSuccess}
+                  />
+                )}
+              </li>
+              {FOOTER_PRODUCT.map((l) => (
+                <li key={l.label}>
+                  <a href={l.href}>{l.label}</a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div className="footer-col">
+            <h2 className="footer-heading">Formats</h2>
+            <ul>
+              <li>
+                <span className="footer-static">PDF → dark PDF</span>
+              </li>
+              <li>
+                <span className="footer-static">DOCX → dark DOCX</span>
+              </li>
+              <li>
+                <span className="footer-static">PPTX → dark PPTX</span>
+              </li>
+              <li>
+                <span className="footer-static">Up to 50 MB per file</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="shell footer-base">
+          {/* The year is read in an effect — `new Date()` at render time is an
+              unstable value that blocks static prerendering. */}
+          <p>© {copyrightYear} Noctra. Documents stay on your device.</p>
+        </div>
+      </footer>
+
+      <style jsx>{`
+        /* ══ Layout shell ══════════════════════════════════════════════ */
+        .landing {
+          background: var(--bg-base);
+          color: var(--text-primary);
+          overflow-x: clip;
+        }
+        .shell {
+          width: 100%;
+          max-width: var(--shell-max);
+          margin-inline: auto;
+          padding-inline: clamp(20px, 5vw, 48px);
+        }
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
+          border: 0;
+        }
+
+        /* ══ Header ════════════════════════════════════════════════════ */
+        .site-header {
+          position: sticky;
+          top: 0;
+          z-index: 60;
+          background: rgba(242, 242, 242, 0.74);
+          border-bottom: 1px solid var(--border-hairline);
+        }
+        /* The minifier collapses backdrop-filter into its -webkit- alias,
+           which Chrome does not honour for computed style. Wrapping it in a
+           supports query preserves the standard property. */
+        @supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+          .site-header {
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+          }
+        }
+        .header-inner {
+          height: var(--nav-h);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 24px;
+        }
+        .wordmark {
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 1.25rem;
+          letter-spacing: -0.05em;
+          color: #111111;
+          text-decoration: none;
+        }
+        .wordmark-icon {
+          border-radius: 8px;
+          object-fit: cover;
+        }
+        .nav-desktop {
+          display: none;
+          gap: clamp(18px, 3vw, 38px);
+        }
+        .nav-link {
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-secondary);
+          text-decoration: none;
+          padding-block: 6px;
+          border-bottom: 1px solid transparent;
+          transition: color var(--transition-fast),
+            border-color var(--transition-fast);
+        }
+        .nav-link:hover {
+          color: var(--text-primary);
+          border-bottom-color: var(--text-primary);
+        }
+        .header-actions {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        /* Pill CTA — 1px dark border, inverts on hover */
+        .pill-cta {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 44px;
+          padding-inline: 22px;
+          border: 1px solid #111111;
+          border-radius: var(--radius-pill);
+          background: transparent;
+          color: #111111;
+          font-family: var(--font-body);
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          text-decoration: none;
+          white-space: nowrap;
+          cursor: pointer;
+          transition: background var(--transition-fast),
+            color var(--transition-fast);
+        }
+        .pill-cta:hover {
+          background: #111111;
+          color: #f2f2f2;
+        }
+        .pill-cta--solid {
+          background: #111111;
+          color: #f2f2f2;
+        }
+        .pill-cta--solid:hover {
+          background: transparent;
+          color: #111111;
+        }
+        .pill-cta--invert {
+          border-color: #f2f2f2;
+          color: #f2f2f2;
+        }
+        .pill-cta--invert:hover {
+          background: #f2f2f2;
+          color: #111111;
+        }
+        .pill-cta--pending {
+          cursor: wait;
+          opacity: 0.62;
+        }
+
+        .menu-toggle {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          background: transparent;
+          border: 1px solid #111111;
+          border-radius: var(--radius-pill);
+          cursor: pointer;
+        }
+        .menu-toggle-bars {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          width: 16px;
+        }
+        .menu-toggle-bars span {
+          display: block;
+          height: 1px;
+          background: #111111;
+        }
+        .mobile-nav {
+          border-top: 1px solid var(--border-hairline);
+          background: #f2f2f2;
+          padding: 8px clamp(20px, 5vw, 48px) 20px;
+        }
+        .mobile-nav nav {
+          display: flex;
+          flex-direction: column;
+        }
+        .mobile-nav-link {
+          padding: 16px 0;
+          font-size: 0.8125rem;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-primary);
+          text-decoration: none;
+          border-bottom: 1px solid var(--border-hairline);
+        }
+        .mobile-nav-link--cta {
+          border-bottom: 0;
+          color: var(--accent-purple);
+        }
+
+        @media (min-width: 900px) {
+          .nav-desktop {
+            display: flex;
+          }
+          .menu-toggle {
+            display: none;
+          }
+          .mobile-nav {
+            display: none;
+          }
+        }
+
+        /* ══ Hero ══════════════════════════════════════════════════════ */
+        .hero {
+          padding-top: clamp(56px, 9vw, 120px);
+          padding-bottom: clamp(64px, 10vw, 132px);
+        }
+        .hero-eyebrow {
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          margin-bottom: clamp(24px, 4vw, 44px);
+        }
+        .hero-lockup {
+          position: relative;
+        }
+        .hero-title {
+          position: relative;
+          z-index: 2;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(2.1rem, 8.4vw, 7.25rem);
+          line-height: 0.9;
+          letter-spacing: -0.05em;
+          text-transform: uppercase;
+          color: #111111;
+          margin: 0;
+        }
+        /* Typographic Echo Stack — four decorative repetitions, offset ~0.04em
+           each, entirely non-interactive and hidden from assistive tech. */
+        .echo-stack {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          pointer-events: none;
+          user-select: none;
+        }
+        .echo {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(2.1rem, 8.4vw, 7.25rem);
+          line-height: 0.9;
+          letter-spacing: -0.05em;
+          text-transform: uppercase;
+          will-change: transform;
+        }
+        /* Stack offsets live in top/left, not transform: the entrance
+           animation owns transform (animejs only reads inline transforms,
+           so a stylesheet transform would be clobbered at completion). */
+        .echo--1 {
+          top: 0.04em;
+          left: 0.04em;
+          color: #bfbfbf;
+        }
+        .echo--2 {
+          top: 0.08em;
+          left: 0.08em;
+          color: #c9c9c9;
+        }
+        .echo--3 {
+          top: 0.12em;
+          left: 0.12em;
+          color: #d1d1d1;
+        }
+        .echo--4 {
+          top: 0.16em;
+          left: 0.16em;
+          color: #d9d9d9;
+        }
+        .hero-sub {
+          margin-top: clamp(32px, 5vw, 56px);
+          max-width: 58ch;
+          font-size: clamp(1rem, 1.4vw, 1.1875rem);
+          line-height: 1.6;
+          color: var(--text-secondary);
+        }
+        .hero-sub-lead {
+          display: inline-block;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 1.35em;
+          letter-spacing: -0.05em;
+          color: #111111;
+        }
+        .hero-actions {
+          margin-top: clamp(32px, 5vw, 48px);
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 20px 28px;
+          min-height: 60px;
+        }
+        .hero-cta-inner {
+          width: min(420px, 100%);
+        }
+        .landing-auth-feedback {
+          flex: 0 0 100%;
+          max-width: 58ch;
+          margin-top: -4px;
+          font-size: 0.8125rem;
+          line-height: 1.5;
+          color: #a93636;
+        }
+
+        .text-cta {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-primary);
+          text-decoration: none;
+          padding-block: 6px;
+          border-bottom: 1px solid var(--border-default);
+          transition: border-color var(--transition-fast),
+            gap var(--transition-fast);
+        }
+        .text-cta:hover {
+          gap: 16px;
+          border-bottom-color: var(--text-primary);
+        }
+        .text-cta-arrow {
+          font-size: 0.95em;
+          line-height: 1;
+        }
+        .text-cta--standalone {
+          align-self: flex-end;
+        }
+        .text-cta--invert {
+          color: #f2f2f2;
+          border-bottom-color: rgba(242, 242, 242, 0.35);
+        }
+        .text-cta--invert:hover {
+          border-bottom-color: #f2f2f2;
+        }
+
+        /* ══ Section furniture ═════════════════════════════════════════ */
+        .section-label {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.24em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          margin-bottom: 18px;
+        }
+        .section-label--light {
+          color: rgba(242, 242, 242, 0.62);
+        }
+        .section-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(2rem, 5vw, 3.75rem);
+          line-height: 0.9;
+          letter-spacing: -0.05em;
+          text-transform: uppercase;
+          color: #111111;
+          margin: 0;
+        }
+        .section-head {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 24px 48px;
+          margin-bottom: clamp(36px, 5vw, 64px);
+        }
+        .section-note {
+          max-width: 34ch;
+          font-size: 0.9375rem;
+          line-height: 1.6;
+          color: var(--text-secondary);
+        }
+        .hairline {
+          height: 1px;
+          background: var(--border-hairline);
+        }
+
+        /* ══ Philosophy ════════════════════════════════════════════════ */
+        .philosophy {
+          padding-block: clamp(64px, 9vw, 128px);
+        }
+        .philosophy-head {
+          max-width: 22ch;
+          margin: clamp(40px, 6vw, 72px) auto clamp(40px, 6vw, 72px);
+          text-align: center;
+          position: relative;
+        }
+        /* thin vertical hairline divider above the heading */
+        .philosophy-head::before {
+          content: "";
+          position: absolute;
+          top: calc(-1 * clamp(28px, 4vw, 48px));
+          left: 50%;
+          width: 1px;
+          height: clamp(28px, 4vw, 48px);
+          background: var(--border-default);
+        }
+        .philosophy-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(2.5rem, 8vw, 6rem);
+          line-height: 0.9;
+          letter-spacing: -0.05em;
+          text-transform: uppercase;
+          color: #111111;
+          margin: 0;
+        }
+        .philosophy-title .serif-em {
+          color: var(--accent-purple);
+        }
+        .philosophy-lead {
+          margin-top: clamp(20px, 3vw, 32px);
+          font-size: clamp(1rem, 1.5vw, 1.25rem);
+          line-height: 1.55;
+          color: var(--text-secondary);
+          max-width: 40ch;
+          margin-inline: auto;
+        }
+        .philosophy-head .section-label {
+          margin-bottom: 22px;
+        }
+
+        .principle-grid {
+          list-style: none;
+          padding: 0;
+          margin: clamp(48px, 7vw, 88px) 0 0;
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 0;
+          border-top: 1px solid var(--border-hairline);
+        }
+        .principle {
+          padding: clamp(28px, 4vw, 44px) 0;
+          border-bottom: 1px solid var(--border-hairline);
+        }
+        .principle-index {
+          display: block;
+          font-family: var(--font-display);
+          font-weight: 600;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          color: var(--text-muted);
+          margin-bottom: 16px;
+        }
+        .principle-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(1.5rem, 3vw, 2rem);
+          line-height: 0.95;
+          letter-spacing: -0.05em;
+          text-transform: uppercase;
+          color: #111111;
+          margin: 0 0 12px;
+        }
+        .principle-body {
+          font-size: 1rem;
+          line-height: 1.6;
+          color: var(--text-secondary);
+          max-width: 34ch;
+        }
+
+        @media (min-width: 800px) {
+          .principle-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0;
+            border-bottom: 1px solid var(--border-hairline);
+          }
+          .principle {
+            padding: clamp(32px, 4vw, 48px) clamp(24px, 3vw, 40px);
+            border-bottom: 0;
+            border-right: 1px solid var(--border-hairline);
+          }
+          .principle:first-child {
+            padding-left: 0;
+          }
+          .principle:last-child {
+            border-right: 0;
+            padding-right: 0;
+          }
+        }
+
+        /* ══ Showcase ══════════════════════════════════════════════════ */
+        .showcase {
+          padding-block: clamp(64px, 9vw, 128px);
+          background: var(--bg-surface);
+          border-top: 1px solid var(--border-hairline);
+          border-bottom: 1px solid var(--border-hairline);
+        }
+        .showcase-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: clamp(20px, 2.5vw, 28px);
+        }
+        .sc-card {
+          background: var(--bg-card);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-xl);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .sc-media {
+          position: relative;
+          flex: 1;
+          padding: clamp(20px, 3vw, 32px);
+          min-height: 240px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .sc-media--tall {
+          min-height: 300px;
+        }
+        .sc-media--circle {
+          aspect-ratio: 1;
+          min-height: 0;
+          border-radius: 50%;
+          background: var(--bg-inset);
+        }
+        .sc-body {
+          padding: clamp(20px, 3vw, 28px);
+          border-top: 1px solid var(--border-subtle);
+        }
+        .sc-body--center {
+          text-align: center;
+        }
+        .sc-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(1.25rem, 2vw, 1.625rem);
+          line-height: 1;
+          letter-spacing: -0.04em;
+          color: var(--text-primary);
+          margin: 0 0 10px;
+        }
+        .sc-text {
+          font-size: 0.9375rem;
+          line-height: 1.6;
+          color: var(--text-secondary);
+        }
+
+        /* Grayscale → colour is only applied where a hover actually exists,
+           so touch devices always see the card at full colour. */
+        @media (hover: hover) and (pointer: fine) {
+          .sc-media {
+            filter: grayscale(1);
+            transition: filter var(--transition-slow),
+              transform var(--transition-slow);
+          }
+          .sc-card:hover .sc-media {
+            filter: grayscale(0);
+            transform: scale(1.02);
+          }
+        }
+
+        /* — split document preview — */
+        .doc-split {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: clamp(10px, 1.6vw, 20px);
+        }
+        .doc-page {
+          flex: 1;
+          min-width: 0;
+          margin: 0;
+          border-radius: var(--radius-md);
+          padding: clamp(14px, 2vw, 22px);
+          display: flex;
+          flex-direction: column;
+          gap: clamp(7px, 1vw, 11px);
+        }
+        .doc-page--light {
+          background: #ffffff;
+          border: 1px solid rgba(17, 17, 17, 0.12);
+        }
+        .doc-page--dark {
+          background: #111114;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+        .doc-page-tag {
+          font-family: var(--font-body);
+          font-size: 0.5625rem;
+          font-weight: 700;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+        .doc-page--light .doc-page-tag {
+          color: rgba(17, 17, 17, 0.72);
+        }
+        .doc-page--dark .doc-page-tag {
+          color: rgba(242, 242, 242, 0.55);
+        }
+        .doc-hline {
+          height: 6px;
+          border-radius: 2px;
+          width: 100%;
+        }
+        .doc-hline--title {
+          height: 10px;
+          width: 62%;
+        }
+        .doc-hline--short {
+          width: 44%;
+        }
+        .doc-page--light .doc-hline {
+          background: rgba(17, 17, 17, 0.16);
+        }
+        .doc-page--light .doc-hline--title {
+          background: rgba(17, 17, 17, 0.72);
+        }
+        .doc-page--dark .doc-hline {
+          background: rgba(242, 242, 242, 0.2);
+        }
+        .doc-page--dark .doc-hline--title {
+          background: rgba(242, 242, 242, 0.8);
+        }
+        .doc-chart {
+          display: flex;
+          align-items: flex-end;
+          gap: 5px;
+          height: clamp(52px, 8vw, 84px);
+          padding-top: 4px;
+        }
+        .doc-chart span {
+          flex: 1;
+          border-radius: 2px 2px 0 0;
+          background: #7c6dff;
+        }
+        .doc-chart span:nth-child(2) {
+          background: #4f8fff;
+        }
+        .doc-chart span:nth-child(3) {
+          background: #34d399;
+        }
+        .doc-chart span:nth-child(4) {
+          background: #f59e0b;
+        }
+        .doc-arrow {
+          flex: 0 0 auto;
+          width: clamp(26px, 4vw, 46px);
+          height: 1px;
+          background: var(--border-strong);
+          position: relative;
+        }
+        .doc-arrow span {
+          position: absolute;
+          right: 0;
+          top: 50%;
+          width: 7px;
+          height: 7px;
+          border-top: 1px solid var(--border-strong);
+          border-right: 1px solid var(--border-strong);
+          transform: translateY(-50%) rotate(45deg);
+        }
+
+        /* — tall pill diagram — */
+        .diagram {
+          width: 100%;
+          max-width: 300px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: clamp(18px, 3vw, 28px);
+        }
+        .diagram-orbit {
+          position: relative;
+          width: clamp(140px, 40%, 170px);
+          aspect-ratio: 1;
+          border: 1px solid var(--border-default);
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+        }
+        .diagram-core {
+          width: 34%;
+          aspect-ratio: 1;
+          border-radius: 50%;
+          background: #111114;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .diagram-node {
+          position: absolute;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: #7c6dff;
+        }
+        .diagram-node--a {
+          top: -7px;
+          left: 50%;
+          transform: translateX(-50%);
+        }
+        .diagram-node--b {
+          bottom: 14%;
+          right: -4px;
+          background: #4f8fff;
+        }
+        .diagram-node--c {
+          bottom: 14%;
+          left: -4px;
+          background: #34d399;
+        }
+        .diagram-plot {
+          display: flex;
+          align-items: flex-end;
+          gap: 6px;
+          width: 100%;
+          height: clamp(64px, 12vw, 96px);
+          padding: 10px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-sm);
+          background: var(--bg-inset);
+        }
+        .diagram-plot span {
+          flex: 1;
+          background: rgba(124, 109, 255, 0.55);
+          border-radius: 2px 2px 0 0;
+        }
+        .diagram-plot span:nth-child(2n) {
+          background: rgba(79, 143, 255, 0.5);
+        }
+        .diagram-caption {
+          font-family: var(--font-body);
+          font-size: 0.625rem;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+
+        /* — circular format wheel — */
+        .format-wheel {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          width: 74%;
+          aspect-ratio: 1;
+          border: 1px solid var(--border-default);
+          border-radius: 50%;
+        }
+        .format-chip {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(1.5rem, 4vw, 2.25rem);
+          letter-spacing: -0.05em;
+          color: var(--text-primary);
+        }
+        .format-divider {
+          width: 34px;
+          height: 1px;
+          background: var(--border-strong);
+        }
+
+        /* — wide text-layer band — */
+        .textlayer {
+          position: relative;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: clamp(12px, 2vw, 18px);
+          padding: clamp(20px, 3vw, 32px);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          background: var(--bg-inset);
+        }
+        .textlayer-line {
+          margin: 0;
+          font-size: clamp(0.9375rem, 1.5vw, 1.125rem);
+          line-height: 1.5;
+          color: var(--text-primary);
+        }
+        .textlayer-line--muted {
+          color: var(--text-secondary);
+          font-size: 0.9375rem;
+        }
+        .textlayer-line mark {
+          background: rgba(124, 109, 255, 0.3);
+          color: inherit;
+          padding: 1px 3px;
+        }
+        .textlayer-link {
+          display: inline-block;
+          margin-right: 22px;
+          color: var(--accent-blue);
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+        .textlayer-link--internal {
+          color: var(--accent-purple);
+        }
+        .textlayer-selection {
+          position: absolute;
+          right: clamp(18px, 3vw, 30px);
+          bottom: clamp(16px, 2.5vw, 26px);
+          width: clamp(48px, 8vw, 84px);
+          height: 10px;
+          background: rgba(124, 109, 255, 0.35);
+          border-radius: 2px;
+        }
+
+        @media (min-width: 760px) {
+          .showcase-grid {
+            grid-template-columns: repeat(12, 1fr);
+          }
+          .sc-card--wide {
+            grid-column: span 7;
+            min-height: 460px;
+          }
+          .sc-card--pill {
+            grid-column: span 5;
+            height: 500px;
+          }
+          .sc-card--circle {
+            grid-column: span 4;
+            align-self: start;
+            aspect-ratio: auto;
+          }
+          .sc-card--circle .sc-media--circle {
+            aspect-ratio: 1;
+            max-width: 340px;
+            margin-inline: auto;
+          }
+          .sc-card--band {
+            grid-column: span 8;
+            min-height: 380px;
+          }
+        }
+
+        /* ══ Features ══════════════════════════════════════════════════ */
+        .features {
+          padding-block: clamp(64px, 9vw, 128px);
+        }
+        .feature-grid {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: grid;
+          grid-template-columns: 1fr;
+          border-top: 1px solid var(--border-subtle);
+          border-left: 1px solid var(--border-subtle);
+        }
+        .feature-card {
+          position: relative;
+          padding: clamp(28px, 3.5vw, 44px);
+          border-right: 1px solid var(--border-subtle);
+          border-bottom: 1px solid var(--border-subtle);
+          background: transparent;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          transition: background var(--transition-base);
+        }
+        .feature-card:hover {
+          background: rgba(17, 17, 17, 0.04);
+        }
+
+        /* small geometric marks — CSS only, no icon set */
+        .geo {
+          display: block;
+          width: 46px;
+          height: 46px;
+          position: relative;
+          transition: transform 420ms cubic-bezier(0.77, 0, 0.175, 1);
+          margin-bottom: 6px;
+        }
+        .feature-card:hover .geo {
+          transform: rotate(12deg);
+        }
+        .geo::before,
+        .geo::after,
+        .geo .geo-mark {
+          content: "";
+          position: absolute;
+          display: block;
+        }
+        .geo--square::before {
+          inset: 0;
+          border: 1px solid #111111;
+        }
+        .geo--square .geo-mark {
+          inset: 12px;
+          background: #111111;
+        }
+        .geo--stack::before {
+          left: 0;
+          right: 0;
+          top: 6px;
+          height: 10px;
+          border: 1px solid #111111;
+        }
+        .geo--stack::after {
+          left: 0;
+          right: 0;
+          top: 20px;
+          height: 10px;
+          background: rgba(17, 17, 17, 0.28);
+        }
+        .geo--stack .geo-mark {
+          left: 0;
+          right: 0;
+          top: 34px;
+          height: 10px;
+          background: #111111;
+        }
+        .geo--ring::before {
+          inset: 0;
+          border: 1px solid #111111;
+          border-radius: 50%;
+        }
+        .geo--ring .geo-mark {
+          inset: 14px;
+          background: #111111;
+          border-radius: 50%;
+        }
+        .geo--grid::before {
+          left: 0;
+          top: 0;
+          width: 20px;
+          height: 20px;
+          background: #111111;
+        }
+        .geo--grid::after {
+          right: 0;
+          top: 0;
+          width: 20px;
+          height: 20px;
+          border: 1px solid #111111;
+        }
+        .geo--grid .geo-mark {
+          left: 0;
+          bottom: 0;
+          width: 20px;
+          height: 20px;
+          border: 1px solid #111111;
+        }
+        .geo--lines::before {
+          left: 0;
+          right: 0;
+          top: 8px;
+          height: 1px;
+          background: #111111;
+          box-shadow: 0 9px 0 #111111, 0 18px 0 rgba(17, 17, 17, 0.4),
+            0 27px 0 rgba(17, 17, 17, 0.4);
+        }
+        .geo--lines .geo-mark {
+          display: none;
+        }
+        .geo--link::before {
+          left: 0;
+          top: 12px;
+          width: 26px;
+          height: 12px;
+          border: 1px solid #111111;
+          border-radius: 999px;
+        }
+        .geo--link::after {
+          right: 0;
+          top: 12px;
+          width: 26px;
+          height: 12px;
+          border: 1px solid #111111;
+          border-radius: 999px;
+        }
+        .geo--link .geo-mark {
+          left: 50%;
+          top: 17px;
+          width: 8px;
+          height: 1px;
+          background: #111111;
+          transform: translateX(-50%);
+        }
+
+        .feature-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(1.25rem, 1.8vw, 1.5rem);
+          line-height: 1;
+          letter-spacing: -0.04em;
+          color: var(--text-primary);
+          margin: 0;
+        }
+        .feature-body {
+          font-size: 0.9375rem;
+          line-height: 1.65;
+          color: var(--text-secondary);
+          flex: 1;
+        }
+        .feature-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 6px;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-primary);
+          text-decoration: none;
+        }
+        .feature-arrow {
+          display: inline-block;
+          transition: transform var(--transition-base);
+        }
+        .feature-card:hover .feature-arrow {
+          transform: translate(4px, -4px);
+        }
+        .feature-link:hover .feature-link-label {
+          text-decoration: underline;
+          text-underline-offset: 4px;
+        }
+
+        @media (min-width: 700px) {
+          .feature-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+        @media (min-width: 1040px) {
+          .feature-grid {
+            grid-template-columns: repeat(3, 1fr);
+          }
+        }
+
+        /* ══ Closing CTA ═══════════════════════════════════════════════ */
+        .closing {
+          background: #111114;
+          color: #f2f2f2;
+          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          padding-block: clamp(64px, 9vw, 120px);
+        }
+        .closing-inner {
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .closing-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(2.25rem, 6.5vw, 5rem);
+          line-height: 0.9;
+          letter-spacing: -0.05em;
+          text-transform: uppercase;
+          color: #f2f2f2;
+          margin: 0;
+        }
+        .closing-actions {
+          margin-top: clamp(32px, 4vw, 48px);
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 20px 28px;
+        }
+        .closing-cta-inner {
+          width: min(420px, 100%);
+        }
+
+        /* ══ Footer ════════════════════════════════════════════════════ */
+        .site-footer {
+          background: #0b0b0e;
+          color: #f2f2f2;
+          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          padding-top: clamp(48px, 7vw, 84px);
+          padding-bottom: clamp(28px, 4vw, 44px);
+        }
+        .footer-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: clamp(32px, 5vw, 48px);
+        }
+        .footer-wordmark {
+          display: block;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(2rem, 5vw, 3rem);
+          letter-spacing: -0.05em;
+          line-height: 0.9;
+          color: #f2f2f2;
+          margin-bottom: 18px;
+        }
+        .footer-desc {
+          font-size: 0.9375rem;
+          line-height: 1.65;
+          color: rgba(242, 242, 242, 0.62);
+          max-width: 42ch;
+        }
+        .footer-heading {
+          font-family: var(--font-body);
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(242, 242, 242, 0.5);
+          margin: 0 0 18px;
+        }
+        .footer-col ul {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .footer-col a {
+          font-size: 0.9375rem;
+          color: rgba(242, 242, 242, 0.82);
+          text-decoration: none;
+          transition: color var(--transition-fast);
+        }
+        .footer-col a:hover {
+          color: #f2f2f2;
+          text-decoration: underline;
+          text-underline-offset: 4px;
+        }
+        .footer-static {
+          font-size: 0.9375rem;
+          color: rgba(242, 242, 242, 0.62);
+        }
+        .footer-auth-pending {
+          font-size: 0.9375rem;
+          color: rgba(242, 242, 242, 0.5);
+        }
+        .footer-base {
+          margin-top: clamp(40px, 6vw, 68px);
+          padding-top: 24px;
+          border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .footer-base p {
+          font-size: 0.8125rem;
+          color: rgba(242, 242, 242, 0.5);
+        }
+
+        @media (min-width: 760px) {
+          .footer-grid {
+            grid-template-columns: 1.6fr 1fr 1fr 1fr;
+            gap: clamp(28px, 4vw, 56px);
+          }
+        }
+
+        /* ══ Motion safety ═════════════════════════════════════════════ */
+        [data-hero],
+        [data-reveal] {
+          will-change: opacity, transform;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [data-hero],
+          [data-reveal],
+          [data-echo] {
+            opacity: 1 !important;
+            transform: none !important;
+            clip-path: none !important;
+          }
+          /* Echo stack offsets are set via top/left (see .echo--N), so they
+             survive transform: none untouched. */
+        }
+      `}</style>
+    </div>
   );
 }

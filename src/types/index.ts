@@ -16,24 +16,23 @@ export interface UserProfile {
 
 export interface Conversion {
   id: string;
+  /** Firebase UID of the owner. Set server-side from the verified token. */
   userId: string;
   originalFileName: string;
   originalFileSize: number; // bytes
-  fileType: "pdf" | "pptx";
+  /** Derived name for the dark-mode output, e.g. `notes-dark.pdf`. */
+  outputFileName?: string;
+  fileType: "pdf" | "docx" | "pptx";
   status: ConversionStatus;
   createdAt: number; // Unix timestamp ms
   completedAt?: number;
   errorMessage?: string;
-  // Stored as base64 data URL in Firestore (for small files)
-  // or as a download token pointing to Firebase Storage (large files)
-  outputDataUrl?: string;
-  outputDownloadUrl?: string;
   pageCount?: number;
 }
 
 export interface ConvertApiRequest {
   fileName: string;
-  fileType: "pdf" | "pptx";
+  fileType: "pdf" | "docx" | "pptx";
   // base64-encoded file content
   fileData: string;
 }

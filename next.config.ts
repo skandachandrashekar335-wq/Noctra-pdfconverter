@@ -4,6 +4,23 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
 
+  images: {
+    // Google profile photos (Google Sign-In) are served from
+    // lh3.googleusercontent.com — allow them for next/image in the dashboard.
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "*.googleusercontent.com",
+        pathname: "/**",
+      },
+    ],
+  },
+
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // These are Node.js-only native modules — stub them out so the browser
