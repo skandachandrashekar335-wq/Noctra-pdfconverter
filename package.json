@@ -43,7 +43,8 @@
     "protobufjs@7.6.6": true
   },
   "overrides": {
-    "@grpc/grpc-js": "1.14.6"
+    "@grpc/grpc-js": "1.14.6",
+    "jose": "5.10.0"
   },
   "browserslist": [
     "chrome >= 100",

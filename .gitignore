@@ -43,3 +43,6 @@ firebase-adminsdk*.json
 
 # agent tooling artifacts — not part of the application
 .opencode/
+.env*
+# …but the documented template is not a secret and must stay in the repo.
+!.env.example
