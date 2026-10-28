@@ -46,8 +46,13 @@ export interface HistoryHandlers {
       pageCount?: unknown;
       errorMessage?: unknown;
       outputFileName?: unknown;
+      displayName?: unknown;
+      isFavorite?: unknown;
+      tags?: unknown;
+      documentKey?: unknown;
     }
   ): Promise<unknown | null>;
+  remove?(uid: string, id: string): Promise<boolean>;
 }
 
 function unauthorized(reason: AuthFailureReason) {
@@ -243,9 +248,14 @@ export async function handleUpdate(
     patch.status !== "processing" &&
     patch.status !== "completed" &&
     patch.status !== "failed" &&
+    patch.status !== "cancelled" &&
     patch.pageCount === undefined &&
     patch.errorMessage === undefined &&
-    patch.outputFileName === undefined
+    patch.outputFileName === undefined &&
+    patch.displayName === undefined &&
+    patch.isFavorite === undefined &&
+    patch.tags === undefined &&
+    patch.documentKey === undefined
   ) {
     return NextResponse.json(
       { error: "Nothing to update.", code: "request/invalid" },
@@ -259,6 +269,10 @@ export async function handleUpdate(
       pageCount: patch.pageCount,
       errorMessage: patch.errorMessage,
       outputFileName: patch.outputFileName,
+      displayName: patch.displayName,
+      isFavorite: patch.isFavorite,
+      tags: patch.tags,
+      documentKey: patch.documentKey,
     });
     // 404 rather than 403: confirming a record exists but belongs to someone
     // else would leak that it exists.
@@ -269,6 +283,43 @@ export async function handleUpdate(
       );
     }
     return NextResponse.json({ conversion: updated });
+  } catch (error) {
+    return storageErrorResponse(error);
+  }
+}
+
+/** DELETE /api/history/:id — delete a record the caller owns. */
+export async function handleDelete(
+  request: NextRequest,
+  handlers: HistoryHandlers,
+  id: string
+) {
+  const auth = await authenticateRequest(request, handlers);
+  if (auth instanceof NextResponse) return auth;
+
+  if (typeof id !== "string" || id.length === 0) {
+    return NextResponse.json(
+      { error: "A record id is required.", code: "request/invalid" },
+      { status: 400 }
+    );
+  }
+  if (!handlers.remove) {
+    return NextResponse.json(
+      { error: "History deletion is not configured.", code: "history/unavailable" },
+      { status: 503 }
+    );
+  }
+
+  try {
+    const removed = await handlers.remove(auth.uid, id);
+    // A missing or foreign row is deliberately indistinguishable.
+    if (!removed) {
+      return NextResponse.json(
+        { error: "Record not found.", code: "history/not-found" },
+        { status: 404 }
+      );
+    }
+    return new NextResponse(null, { status: 204 });
   } catch (error) {
     return storageErrorResponse(error);
   }

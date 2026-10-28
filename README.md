@@ -23,7 +23,17 @@ Students commonly study from documents with white backgrounds and black text. La
 - 🌙 Intelligent dark-mode conversion for PDF, DOCX and PPTX
 - 🔒 Firebase Google authentication
 - 📁 Drag-and-drop upload with real-time progress
+- 🗂️ Bounded batch conversion (PDF, DOCX and PPTX) with per-file status and ZIP export
+- 🎛️ Opt-in conversion profiles: OLED Black, Charcoal Dark, Warm Sepia and Low-Contrast Night
+- 📊 Measured OLED quality report after each PDF conversion (real pixel-classification counts, never estimates)
+- 🩺 Copyable per-conversion diagnostics (file info, phase timings, environment facts) — shown only on demand, never uploaded
 - 📜 Conversion history dashboard (stored in Supabase, scoped to your account)
+- 🔎 Search, filter, sort, select and owner-scoped delete history records
+- 📖 Built-in PDF reader with thumbnails, search, zoom, themes and keyboard navigation
+- 🌓 Actual before/after PDF preview using the original and converted in-memory files
+- 🔖 Owner-scoped reader bookmarks, notes and text highlights
+- 🏷️ Persistent favourites and tags for history metadata
+- ⏹️ Batch cancellation with retryable failed/cancelled items
 - 🧠 All processing runs in your browser — documents never leave your device
 - 🎨 Smooth animations (Anime.js v4) with reduced-motion support
 - 📱 Responsive design
@@ -95,8 +105,12 @@ In Firebase Console → Authentication → Sign-in method → Google:
    For an existing Noctra database, run
    [`supabase/migrations/0002_add_docx_file_type.sql`](./supabase/migrations/0002_add_docx_file_type.sql)
    after `0001` to add DOCX history rows.
+   Apply [`supabase/migrations/0003_reader_and_organization.sql`](./supabase/migrations/0003_reader_and_organization.sql)
+   and [`supabase/migrations/0004_add_cancelled_status.sql`](./supabase/migrations/0004_add_cancelled_status.sql)
+   after those migrations for reader metadata, organization fields and cancelled
+   batch statuses.
 
-Those migrations create/update the `conversions` table, its indexes, **row level security**,
+Those migrations create/update the `conversions` table, reader metadata tables, their indexes, **row level security**,
 the restrictive policy that pins tokens to this Firebase project, and the `REVOKE`
 statements. Nothing else needs to be applied.
 
@@ -150,10 +164,49 @@ If `SUPABASE_URL` and both server-key options are missing, everything still work
 only **saved history** is unavailable, and the UI says exactly that instead of claiming
 the conversion failed.
 
+The optional study assistant uses `NOCTRA_AI_BASE_URL`, `NOCTRA_AI_API_KEY` and
+`NOCTRA_AI_MODEL` on the server only. It is disabled when those values are absent.
+The API requires explicit consent and receives only selected source passages; it does
+not silently upload an entire document. No provider is included or paid for by default.
+
 DOCX conversion is structural and keeps the `.docx` package editable. This browser
 path does not export DOCX or PPTX to PDF because reliable Office pagination requires
 LibreOffice/Microsoft Office or a separately secured worker. Do not label a structural
 DOCX/PPTX result as a PDF export.
+
+### Conversion profiles and batch processing
+
+The existing OLED Black output remains the default. The dashboard also offers
+optional profiles for Charcoal Dark, Warm Sepia and Low-Contrast Night, in both the
+single-file drop zone and the batch workspace. Profiles are passed into the
+format-specific conversion pipeline, so the PDF pixel transform and the editable
+DOCX/PPTX XML transforms use the same selected palette. A profile applies to the
+next conversion only — changing the picker never restyles a file that already
+finished, and the default OLED Black output remains byte-stable.
+
+The Batch workspace accepts up to 20 files and processes at most two concurrently.
+Each file has its own queue/progress/result state, successful files can be downloaded
+individually, and completed results can be packaged into a ZIP. Each batch conversion
+uses the same best-effort history tracker as single-file conversion; the current batch
+screen does not live-refresh the separate Recent conversions list after the batch ends,
+so reload the dashboard to see those newly written rows.
+
+### Reader and document metadata
+
+The single-file PDF result can be opened in the built-in reader. It supports page
+navigation, thumbnails, fit-to-width, zoom, text search, full-screen mode, keyboard
+navigation, reading themes, bookmarks, notes and text highlights. Reader metadata is
+keyed by a SHA-256 hash of the locally opened output and stored in Supabase only after
+the authenticated API route verifies the Firebase user.
+
+Converted binaries remain in browser memory only. A history row does not imply that the
+source or output can be reopened after the browser session ends. If a PDF page contains
+no extracted text, Noctra reports that OCR is unavailable in this browser build instead
+of claiming that a scan was made searchable.
+
+For PDF conversions, the completed state also shows a side-by-side browser preview of
+the original and transformed files. DOCX and PPTX remain editable structural outputs;
+their reliable Office pagination is not fabricated in the browser preview.
 
 #### Configuring Firebase token verification
 
@@ -321,6 +374,47 @@ npm run verify:backend -- --write   # also test insert / UID scoping
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Managing the dev server (port 3000)
+
+Noctra runs **one** development server on port 3000. If the URL already loads
+before you run `npm run dev`, a previous instance is still alive — typically
+because it was launched in the background (e.g. `nohup npm run dev &` or a
+closed terminal that didn't kill the child), which orphans it to `init` so it
+outlives the shell that started it.
+
+**Check what's running** (read-only, safe to run anytime):
+
+```bash
+# Who owns port 3000, and from which directory?
+lsof -nP -iTCP:3000 -sTCP:LISTEN
+
+# Confirm it's this repo's dev server (not another project or a prod build)
+lsof -a -p <PID> -d cwd        # cwd should be .../Noctra-pdfconverter
+```
+
+**Start:** run `npm run dev` from the repository root. If port 3000 is already
+held by a *stale* Noctra dev server, stop it first (below) — don't start a
+second one, or the two will fight over the port.
+
+**Stop safely** (terminate only the verified Noctra dev process — never
+`killall node`, which would take down every Node project on the machine):
+
+```bash
+# Graceful: stop the npm parent and its next dev child
+kill <npm-run-dev-PID>          # the `npm run dev` process
+# or target the listener directly:
+kill <next-server-PID>
+```
+
+Confirm it's gone with `lsof -nP -iTCP:3000 -sTCP:LISTEN` (should return
+nothing). Then `npm run dev` will start fresh from the current working tree.
+
+**Dev vs. production build:** `next dev` compiles from source into `.next/dev/`
+and serves live code — it does **not** use the `.next/` production output that
+`npm run build` writes. A leftover production `BUILD_ID` in `.next/` therefore
+never shadows your running dev server. Use `npm start` only to preview a
+production build, and never run it while the dev server holds port 3000.
 
 ---
 
@@ -490,12 +584,23 @@ A future version could use a PDF editing library that preserves text as vectors.
 - PDF text is preserved via an invisible Helvetica layer: non-WinAnsi scripts
   (CJK, emoji) are not searchable in the output, and link rectangles are
   approximations of the originals
+- The original Unit IV source PDF was not available in this workspace. A synthetic
+  anti-aliased neutral-text regression fixture now guards the transform thresholds;
+  the real source-document visual comparison remains a manual follow-up.
 - The PPTX engine covers common slide structures; edge cases in complex templates may need manual touch-up
 - PDF.js schedules page drawing with `requestAnimationFrame`, so an in-progress
   PDF conversion **pauses while the tab is in the background** and resumes when
   the tab becomes visible again (PPTX conversion is unaffected)
 - History is fetched on mount and refetched when a conversion settles, rather
   than pushed live; a row may lag by a moment while a conversion is in flight
+- Batch conversion outputs are browser-memory-only; the metadata history rows do not
+  retain the converted binaries and may require a dashboard reload after a batch
+- Reader metadata does not retain document binaries; reopening after a browser restart
+  requires converting/opening the document again
+- OCR is detection-only in this build: scanned pages are identified, but no paid or
+  remote OCR service is invoked
+- The study assistant API is an optional, consent-gated OpenAI-compatible adapter;
+  with no provider settings it returns a truthful unavailable state
 - Live Google sign-in and live Supabase isolation are **not** covered by the
   automated suite — see the manual procedures above
 
@@ -508,11 +613,16 @@ src/
 ├── app/
 │   ├── api/history/route.ts   # GET/POST — verifies the Firebase ID token
 │   ├── api/history/[id]/route.ts # PATCH — owner-scoped status updates
+│   ├── api/reader/route.ts    # Reader preferences + annotations
+│   ├── api/reader/[id]/route.ts # Owner-scoped annotation deletion
+│   ├── api/study/route.ts     # Optional consent-gated study provider
 │   ├── dashboard/page.tsx    # Protected dashboard
 │   ├── globals.css           # Design tokens + utility classes
 │   ├── layout.tsx            # Root layout with AuthProvider
 │   └── page.tsx              # Landing page
 ├── components/
+│   ├── BatchUploadZone.tsx    # Bounded multi-file conversion + ZIP export
+│   ├── PDFReader.tsx          # PDF.js reader, search and study annotations
 │   ├── AuthGuard.tsx         # Redirect-to-home wrapper
 │   ├── ConversionList.tsx    # Authenticated history fetch (keyed by uid)
 │   ├── GoogleSignInButton.tsx
@@ -523,11 +633,16 @@ src/
 │   ├── access-control.ts     # Pure auth / data-isolation helpers (unit tested)
 │   ├── auth-token.ts         # Bearer parsing + token-error classification (unit tested)
 │   ├── conversion.ts         # Browser-side conversion orchestrator
+│   ├── conversion-profiles.ts # Shared opt-in dark palettes
+│   ├── document-key.ts        # SHA-256 identity for local documents
 │   ├── firebase-admin.ts     # Server-side Admin SDK: verifyIdToken()
 │   ├── firebase.ts           # Client-side Firebase Auth (no Firestore)
 │   ├── history-api.ts        # Client history store → /api/history
 │   ├── history-row.ts        # Row mapping + input whitelists (unit tested)
 │   ├── history-tracker.ts    # Non-blocking, ordered history writer (unit tested)
+│   ├── ocr.ts                 # Scanned-page detection and honest OCR boundary
+│   ├── reader-api.ts          # Authenticated reader metadata transport
+│   ├── ai-study.ts            # Optional study provider validation/adapter
 │   ├── pdf-converter.ts      # PDF dark-mode engine (PDF.js + pdf-lib)
 │   ├── docx-converter.ts     # DOCX dark-mode engine (JSZip + OOXML)
 │   ├── pptx-converter.ts     # PPTX dark-mode engine (JSZip + XML)
@@ -535,7 +650,9 @@ src/
 │   ├── validation.ts         # Pure file validation helpers (unit tested)
 │   ├── server/
 │   │   ├── history-handlers.ts # Route logic with injectable deps (unit tested)
-│   │   └── history-store.ts    # Supabase service-role client, uid-scoped
+│   │   ├── history-store.ts    # Supabase service-role client, uid-scoped
+│   │   ├── reader-handlers.ts  # Reader auth and request validation
+│   │   └── reader-store.ts     # Reader metadata Supabase store
 │   └── stubs/                # Browser stubs for Node-only packages
 └── types/
     └── index.ts              # Shared TypeScript types
@@ -545,6 +662,9 @@ tests/
 ├── conversion-no-block.test.ts # Source-level guard: no blocking history awaits
 ├── dark-transform.test.ts    # Pixel transform: paper/ink/colour preservation
 ├── history-handlers.test.ts  # Auth, cross-user denial, token rejection
+├── reader-handlers.test.ts   # Reader ownership and validation boundaries
+├── ai-study.test.ts          # Provider configuration and input limits
+├── ocr.test.ts               # Scanned-page detection boundary
 ├── history-row.test.ts       # Row mapping, whitelists, ordered updates
 ├── history-tracker.test.ts   # Queued writes flush in order; failures don't throw
 ├── pdf-converter.test.ts     # Invalid PDF input + no-third-party-CDN guard

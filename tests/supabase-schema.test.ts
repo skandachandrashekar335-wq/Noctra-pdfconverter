@@ -142,6 +142,16 @@ describe("conversions schema", () => {
     assert.match(migration, /drop\s+constraint\s+if\s+exists\s+conversions_file_type_check/i);
     assert.match(migration, /'pdf'[\s\S]*'docx'[\s\S]*'pptx'/);
   });
+
+  test("reader, organization and cancellation migrations exist", () => {
+    const reader = read("supabase/migrations/0003_reader_and_organization.sql");
+    assert.match(reader, /reader_preferences/);
+    assert.match(reader, /reader_annotations/);
+    assert.match(reader, /enable\s+row\s+level\s+security/i);
+    assert.match(reader, /revoke\s+all\s+on\s+public\.reader_annotations\s+from\s+authenticated/i);
+    const cancelled = read("supabase/migrations/0004_add_cancelled_status.sql");
+    assert.match(cancelled, /'cancelled'/);
+  });
 });
 
 describe("no Supabase credentials in the browser", () => {

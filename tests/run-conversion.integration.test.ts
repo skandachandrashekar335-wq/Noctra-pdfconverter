@@ -14,6 +14,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import JSZip from "jszip";
 import type { HistoryStore } from "../src/lib/history-tracker.ts";
+import { revokeObjectUrl } from "../src/lib/temp-resources.ts";
 
 const { runConversion, deriveOutputFileName } = await import(
   "../src/lib/conversion.ts"
@@ -183,6 +184,27 @@ describe("runConversion with a history backend that never responds", () => {
     assert.match(conversionError ?? "", /Only PDF, DOCX and PPTX files are supported/);
   });
 
+  test("honours an already-aborted signal without reporting a conversion failure", async () => {
+    const file = await buildFile("cancelled.pptx");
+    const controller = new AbortController();
+    controller.abort();
+    let cancelled = false;
+    let completed = false;
+    let errored = false;
+    const statuses: string[] = [];
+    await runConversion(file, {
+      signal: controller.signal,
+      onStatusChange: (status) => statuses.push(status),
+      onCancelled: () => { cancelled = true; },
+      onComplete: () => { completed = true; },
+      onError: () => { errored = true; },
+    }, { historyStore: null });
+    assert.equal(cancelled, true);
+    assert.equal(completed, false);
+    assert.equal(errored, false);
+    assert.deepEqual(statuses, ["cancelled"]);
+  });
+
   test("conversion completes even though history creation never settles", async () => {
     const file = await buildFile();
 
@@ -289,5 +311,25 @@ describe("runConversion with a history backend that never responds", () => {
       "deck-dark.PPTX",
       "extension matching is case-insensitive"
     );
+  });
+
+  test("releasing the temporary output URL does not remove history metadata", async () => {
+    const file = await buildFile("retained-history.pptx");
+    const writes: Array<Record<string, unknown>> = [];
+    let outputUrl: string | null = null;
+    const store: HistoryStore = {
+      create: async () => "conversion-1",
+      update: async (_id, data) => { writes.push(data); },
+    };
+
+    await runConversion(file, {
+      onComplete: (url) => { outputUrl = url; },
+    }, { historyStore: store });
+    assert.ok(outputUrl);
+    revokeObjectUrl(outputUrl);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.ok(writes.some((write) => write.status === "completed"));
+    assert.equal(writes.some((write) => "outputUrl" in write || "outputBytes" in write), false);
   });
 });

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { canAccessConversion } from "@/lib/access-control";
 import {
   fetchHistory,
+  deleteHistory,
+  updateHistory,
   HistorySaveError,
   historyFailureMessage,
   resetHistoryAvailability,
@@ -16,6 +18,7 @@ const STATUS_LABELS: Record<string, string> = {
   processing: "Processing…",
   completed: "Complete",
   failed: "Failed",
+  cancelled: "Cancelled",
 };
 
 // Status is never conveyed by colour alone — the label always renders.
@@ -24,6 +27,7 @@ const STATUS_COLORS: Record<string, string> = {
   processing: "#7c6dff",
   completed: "#34d399",
   failed: "#f87171",
+  cancelled: "#f59e0b",
 };
 
 interface ConversionListProps {
@@ -42,6 +46,12 @@ export function ConversionList({ refreshToken = 0 }: ConversionListProps) {
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "failed" | "cancelled">("all");
+  const [sort, setSort] = useState<"newest" | "oldest" | "name">("newest");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState<string | "bulk" | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
   const uid = user?.uid;
 
   useEffect(() => {
@@ -113,6 +123,19 @@ export function ConversionList({ refreshToken = 0 }: ConversionListProps) {
     };
   }, [uid, refreshToken, retryToken]);
 
+  const visibleConversions = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return conversions
+      .filter((conversion) => {
+        if (statusFilter !== "all" && conversion.status !== statusFilter) return false;
+        return !needle || conversion.originalFileName.toLowerCase().includes(needle);
+      })
+      .sort((a, b) => {
+        if (sort === "name") return a.originalFileName.localeCompare(b.originalFileName);
+        return sort === "newest" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt;
+      });
+  }, [conversions, query, sort, statusFilter]);
+
   if (loading) {
     return <ConversionListSkeleton />;
   }
@@ -172,16 +195,161 @@ export function ConversionList({ refreshToken = 0 }: ConversionListProps) {
     );
   }
 
+  async function removeOne(id: string) {
+    if (!window.confirm("Remove this conversion from your history? The downloaded file is not affected.")) return;
+    setDeleting(id);
+    try {
+      await deleteHistory(id);
+      setConversions((items) => items.filter((item) => item.id !== id));
+      setSelected((items) => {
+        const next = new Set(items);
+        next.delete(id);
+        return next;
+      });
+    } catch {
+      setError("Could not remove that history record. Please try again.");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function removeSelected() {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Remove ${selected.size} conversion${selected.size === 1 ? "" : "s"} from your history?`)) return;
+    setDeleting("bulk");
+    try {
+      await Promise.all([...selected].map((id) => deleteHistory(id)));
+      setConversions((items) => items.filter((item) => !selected.has(item.id)));
+      setSelected(new Set());
+    } catch {
+      setError("Some records could not be removed. Refresh history and try again.");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function updateRow(id: string, patch: { isFavorite?: boolean; tags?: string[] }) {
+    setUpdating(id);
+    try {
+      const updated = await updateHistory(id, patch);
+      setConversions((items) => items.map((item) => (item.id === id ? updated : item)));
+    } catch {
+      setError("Could not save that organization change. Please try again.");
+    } finally {
+      setUpdating(null);
+    }
+  }
+
   if (conversions.length === 0) {
     return <EmptyHistory />;
   }
 
+  const allVisibleSelected = visibleConversions.length > 0 && visibleConversions.every((item) => selected.has(item.id));
+
   return (
-    <div className="conversion-list">
-      {conversions.map((c) => (
-        <ConversionRow key={c.id} conversion={c} />
-      ))}
+    <div>
+      <div className="history-toolbar" aria-label="History controls">
+        <label className="history-search">
+          <span className="sr-only">Search history</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search files" />
+        </label>
+        <label className="history-select">
+          <span className="sr-only">Filter history by status</span>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+            <option value="all">All results</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </label>
+        <label className="history-select">
+          <span className="sr-only">Sort history</span>
+          <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name">Filename</option>
+          </select>
+        </label>
+      </div>
+      <div className="history-bulkbar">
+        <label>
+          <input
+            type="checkbox"
+            checked={allVisibleSelected}
+            onChange={() => setSelected((items) => {
+              const next = new Set(items);
+              if (allVisibleSelected) visibleConversions.forEach((item) => next.delete(item.id));
+              else visibleConversions.forEach((item) => next.add(item.id));
+              return next;
+            })}
+          />
+          Select visible
+        </label>
+        <button type="button" className="history-bulk-delete" disabled={selected.size === 0 || deleting !== null} onClick={removeSelected}>
+          {deleting === "bulk" ? "Removing…" : `Remove selected${selected.size ? ` (${selected.size})` : ""}`}
+        </button>
+      </div>
+      <div className="conversion-list">
+        {visibleConversions.length === 0 ? (
+          <p className="history-filter-empty">No history matches those filters.</p>
+        ) : visibleConversions.map((c) => (
+          <ConversionRow
+            key={c.id}
+            conversion={c}
+            selected={selected.has(c.id)}
+            deleting={deleting === c.id}
+            updating={updating === c.id}
+            onSelect={(checked) => setSelected((items) => {
+              const next = new Set(items);
+              if (checked) next.add(c.id); else next.delete(c.id);
+              return next;
+            })}
+            onDelete={() => removeOne(c.id)}
+            onToggleFavorite={() => void updateRow(c.id, { isFavorite: !c.isFavorite })}
+            onSaveTags={(tags) => void updateRow(c.id, { tags })}
+          />
+        ))}
+      </div>
       <style jsx>{`
+        .history-toolbar,
+        .history-bulkbar {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        }
+        .history-search { flex: 1 1 220px; }
+        .history-search input,
+        .history-select select {
+          width: 100%;
+          min-height: 38px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-sm);
+          background: var(--bg-surface);
+          color: var(--text-primary);
+          padding: 8px 10px;
+          font: inherit;
+          font-size: 0.8125rem;
+        }
+        .history-select { flex: 0 1 150px; }
+        .history-bulkbar {
+          justify-content: space-between;
+          color: var(--text-muted);
+          font-size: 0.75rem;
+          padding-bottom: 8px;
+        }
+        .history-bulkbar label { display: inline-flex; align-items: center; gap: 8px; }
+        .history-bulk-delete {
+          border: 0;
+          background: transparent;
+          color: var(--accent-bad);
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.75rem;
+        }
+        .history-bulk-delete:disabled { opacity: 0.45; cursor: not-allowed; }
+        .history-filter-empty { padding: 24px 0; color: var(--text-muted); font-size: 0.875rem; }
         .conversion-list {
           display: flex;
           flex-direction: column;
@@ -265,16 +433,50 @@ function EmptyHistory() {
   );
 }
 
-function ConversionRow({ conversion: c }: { conversion: Conversion }) {
+function ConversionRow({
+  conversion: c,
+  selected,
+  deleting,
+  updating,
+  onSelect,
+  onDelete,
+  onToggleFavorite,
+  onSaveTags,
+}: {
+  conversion: Conversion;
+  selected: boolean;
+  deleting: boolean;
+  updating: boolean;
+  onSelect: (checked: boolean) => void;
+  onDelete: () => void;
+  onToggleFavorite: () => void;
+  onSaveTags: (tags: string[]) => void;
+}) {
+  const [tagDraft, setTagDraft] = useState("");
   const ext = c.fileType.toUpperCase();
   const statusColor = STATUS_COLORS[c.status] ?? "#9898b0";
   const statusLabel = STATUS_LABELS[c.status] ?? c.status;
 
   return (
     <div className="conv-row">
+      <label className="conv-check">
+        <span className="sr-only">Select {c.originalFileName}</span>
+        <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} />
+      </label>
       <div className="conv-ext" aria-hidden="true">
         {ext}
       </div>
+
+      <button
+        type="button"
+        className={`conv-favorite ${c.isFavorite ? "is-favorite" : ""}`}
+        onClick={onToggleFavorite}
+        disabled={updating}
+        aria-pressed={Boolean(c.isFavorite)}
+        aria-label={c.isFavorite ? `Remove ${c.originalFileName} from favourites` : `Favourite ${c.originalFileName}`}
+      >
+        {c.isFavorite ? "★" : "☆"}
+      </button>
 
       <div className="conv-info">
         <p className="conv-name">{c.originalFileName}</p>
@@ -282,6 +484,24 @@ function ConversionRow({ conversion: c }: { conversion: Conversion }) {
           {formatSize(c.originalFileSize)} · {formatDate(c.createdAt)}
           {c.pageCount ? ` · ${c.pageCount} pages` : ""}
         </p>
+        <div className="conv-tags">
+          {(c.tags ?? []).map((tag) => <span key={tag} className="conv-tag">{tag}</span>)}
+          <input
+            value={tagDraft}
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              const tag = tagDraft.trim();
+              if (!tag) return;
+              onSaveTags([...new Set([...(c.tags ?? []), tag])].slice(0, 20));
+              setTagDraft("");
+            }}
+            placeholder="Add tag"
+            aria-label={`Add tag to ${c.originalFileName}`}
+            disabled={updating}
+          />
+        </div>
       </div>
 
       <div
@@ -292,6 +512,9 @@ function ConversionRow({ conversion: c }: { conversion: Conversion }) {
         <StatusDot color={statusColor} animate={c.status === "processing"} />
         {statusLabel}
       </div>
+      <button type="button" className="conv-delete" onClick={onDelete} disabled={deleting} aria-label={`Remove ${c.originalFileName} from history`}>
+        {deleting ? "Removing…" : "Remove"}
+      </button>
 
       <style jsx>{`
         .conv-row {
@@ -302,6 +525,18 @@ function ConversionRow({ conversion: c }: { conversion: Conversion }) {
           border-bottom: 1px solid var(--border-hairline);
           transition: background var(--transition-fast);
         }
+        .conv-check { display: inline-flex; align-items: center; flex-shrink: 0; }
+        .conv-delete {
+          flex-shrink: 0;
+          border: 0;
+          background: transparent;
+          color: var(--text-muted);
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.6875rem;
+        }
+        .conv-delete:hover:not(:disabled) { color: var(--accent-bad); }
+        .conv-delete:disabled { opacity: 0.5; cursor: wait; }
         .conv-row:hover {
           background: var(--bg-elevated);
         }
@@ -321,6 +556,9 @@ function ConversionRow({ conversion: c }: { conversion: Conversion }) {
           text-transform: uppercase;
           color: var(--text-secondary);
         }
+        .conv-favorite { flex-shrink: 0; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+        .conv-favorite.is-favorite { color: var(--accent-warn); }
+        .conv-favorite:disabled { opacity: .45; cursor: wait; }
         .conv-info {
           flex: 1;
           min-width: 0;
@@ -338,6 +576,9 @@ function ConversionRow({ conversion: c }: { conversion: Conversion }) {
           color: var(--text-muted);
           margin-top: 3px;
         }
+        .conv-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+        .conv-tag { padding: 2px 6px; border: 1px solid var(--border-default); border-radius: var(--radius-pill); color: var(--accent-purple); font-size: .625rem; }
+        .conv-tags input { width: 70px; border: 0; border-bottom: 1px solid var(--border-default); background: transparent; color: var(--text-secondary); outline: 0; font: inherit; font-size: .625rem; }
         .conv-status {
           flex-shrink: 0;
           display: flex;

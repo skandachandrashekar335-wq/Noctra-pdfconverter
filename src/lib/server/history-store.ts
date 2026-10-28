@@ -89,6 +89,28 @@ const SELECT_COLUMNS = [
   "original_file_name",
   "original_file_size",
   "output_file_name",
+  "display_name",
+  "is_favorite",
+  "tags",
+  "document_key",
+  "file_type",
+  "status",
+  "page_count",
+  "error_message",
+  "created_at",
+  "completed_at",
+].join(", ");
+
+// Keep existing deployments usable until migration 0003 is applied. New
+// organization fields are optional metadata; status/history must not go dark
+// merely because the additive migration is waiting for an approved rollout.
+const LEGACY_SELECT_COLUMNS = [
+  "id",
+  "user_uid",
+  "client_ref",
+  "original_file_name",
+  "original_file_size",
+  "output_file_name",
   "file_type",
   "status",
   "page_count",
@@ -127,6 +149,10 @@ function classifyStorageFailure(error: unknown): HistoryStorageError["reason"] {
     return "connection-failed";
   }
   return "unknown";
+}
+
+function isSchemaMismatch(error: unknown): boolean {
+  return classifyStorageFailure(error) === "schema-mismatch";
 }
 
 function publicStorageMessage(reason: HistoryStorageError["reason"]): string {
@@ -178,17 +204,19 @@ export async function createConversion(
   const supabase = getServiceClient();
   const row = sanitizeNewConversion(input);
 
-  const { data, error } = await supabase
+  const upsert = (columns: string) => supabase
     .from("conversions")
     .upsert({ ...row, user_uid: uid }, {
       onConflict: "user_uid,client_ref",
       ignoreDuplicates: false,
     })
-    .select(SELECT_COLUMNS)
+    .select(columns)
     .single();
+  let result = await upsert(SELECT_COLUMNS);
+  if (result.error && isSchemaMismatch(result.error)) result = await upsert(LEGACY_SELECT_COLUMNS);
 
   const created = unwrap<ConversionRow>(
-    { data, error },
+    { data: result.data, error: result.error },
     "Could not create the history record"
   );
   return rowToConversion(created);
@@ -206,19 +234,35 @@ export async function updateConversion(
     pageCount?: unknown;
     errorMessage?: unknown;
     outputFileName?: unknown;
+    displayName?: unknown;
+    isFavorite?: unknown;
+    tags?: unknown;
+    documentKey?: unknown;
   }
 ): Promise<Conversion | null> {
   const fields = sanitizeStatusUpdate(patch);
   if (!fields) return null;
 
   const supabase = getServiceClient();
-  const { data, error } = await supabase
+  const update = (columns: string) => supabase
     .from("conversions")
     .update(fields)
     .eq("id", id)
     .eq("user_uid", uid) // ownership scoping — the security boundary
-    .select(SELECT_COLUMNS)
+    .select(columns)
     .maybeSingle();
+  let result = await update(SELECT_COLUMNS);
+  if (result.error && isSchemaMismatch(result.error)) {
+    const metadataFields = ["display_name", "is_favorite", "tags", "document_key"];
+    if (metadataFields.some((field) => field in fields)) {
+      throw new HistoryStorageError(
+        "Organization metadata requires the Noctra reader migration.",
+        "schema-mismatch"
+      );
+    }
+    result = await update(LEGACY_SELECT_COLUMNS);
+  }
+  const { data, error } = result;
 
   // null means "not found or not yours" — the route turns that into a 404.
   if (!data) {
@@ -234,18 +278,42 @@ export async function updateConversion(
   return rowToConversion(data as unknown as ConversionRow);
 }
 
+/** Delete only a record owned by the verified Firebase UID. */
+export async function deleteConversion(uid: string, id: string): Promise<boolean> {
+  const supabase = getServiceClient();
+  const { data, error } = await supabase
+    .from("conversions")
+    .delete()
+    .eq("id", id)
+    .eq("user_uid", uid)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    const reason = classifyStorageFailure(error);
+    throw new HistoryStorageError(
+      `Could not delete the history record: ${publicStorageMessage(reason)}`,
+      reason
+    );
+  }
+  return Boolean(data);
+}
+
 /** List a user's records, newest first. Always scoped to the verified UID. */
 export async function listConversions(
   uid: string,
   limit = 20
 ): Promise<Conversion[]> {
   const supabase = getServiceClient();
-  const { data, error } = await supabase
+  const list = (columns: string) => supabase
     .from("conversions")
-    .select(SELECT_COLUMNS)
+    .select(columns)
     .eq("user_uid", uid)
     .order("created_at", { ascending: false })
     .limit(Math.max(1, Math.min(100, limit)));
+  let result = await list(SELECT_COLUMNS);
+  if (result.error && isSchemaMismatch(result.error)) result = await list(LEGACY_SELECT_COLUMNS);
+  const { data, error } = result;
 
   const rows = unwrap<ConversionRow[]>(
     { data, error },

@@ -13,17 +13,20 @@
  */
 
 import JSZip from "jszip";
-
-const DARK_BG_HEX = "12121A";
-const DARK_SURFACE_HEX = "1C1C26";
-const LIGHT_TEXT_HEX = "E6E6EB";
+import {
+  getConversionProfile,
+  type ConversionProfileId,
+} from "./conversion-profiles.ts";
 
 const WORD_XML = /^word\/(document|header\d+|footer\d+|footnotes|endnotes|comments)[^/]*\.xml$/i;
 const STYLE_XML = /^word\/(styles|numbering)\.xml$/i;
 
 export async function convertDocxToDarkMode(
   inputBuffer: ArrayBuffer,
-  onProgress?: (part: number, total: number) => void
+  onProgress?: (part: number, total: number) => void,
+  profileId?: ConversionProfileId,
+  signal?: AbortSignal,
+  onFinalizing?: (label: string) => void
 ): Promise<Uint8Array> {
   if (inputBuffer.byteLength === 0) {
     throw new Error("The DOCX file is empty.");
@@ -47,32 +50,40 @@ export async function convertDocxToDarkMode(
   const total = Math.max(names.length, 1);
 
   for (let index = 0; index < names.length; index += 1) {
+    if (signal?.aborted) throw new DOMException("Conversion cancelled.", "AbortError");
     const name = names[index];
     const entry = zip.files[name];
     if (!entry || entry.dir) continue;
     const xml = await entry.async("string");
     const transformed = /theme\/theme\d+\.xml$/i.test(name)
-      ? patchThemeXml(xml)
-      : patchWordXml(xml);
+      ? patchThemeXml(xml, profileId)
+      : patchWordXml(xml, profileId);
     zip.file(name, transformed);
     onProgress?.(index + 1, total);
   }
 
-  return zip.generateAsync({ type: "uint8array" });
+  // Repacking runs after the last part tick — report it as finalization so
+  // the UI keeps moving instead of freezing at the last percentage.
+  onFinalizing?.("Repacking the DOCX archive…");
+  if (signal?.aborted) throw new DOMException("Conversion cancelled.", "AbortError");
+  const output = await zip.generateAsync({ type: "uint8array" });
+  if (signal?.aborted) throw new DOMException("Conversion cancelled.", "AbortError");
+  return output;
 }
 
 /** Apply conservative, context-aware replacements to editable OOXML. */
-export function patchWordXml(xml: string): string {
+export function patchWordXml(xml: string, profileId?: ConversionProfileId): string {
+  const profile = getConversionProfile(profileId);
   let output = xml;
 
   // Section/document page backgrounds and Word shading use six-digit RGB.
   output = output.replace(
     /(<w:background\b[^>]*\bw:color=")([0-9A-Fa-f]{6})(")/g,
-    (_match, prefix, hex, suffix) => `${prefix}${mapBackground(hex)}${suffix}`
+    (_match, prefix, hex, suffix) => `${prefix}${mapBackground(hex, profile)}${suffix}`
   );
   output = output.replace(
     /(<w:shd\b[^>]*\bw:fill=")([0-9A-Fa-f]{6})(")/g,
-    (_match, prefix, hex, suffix) => `${prefix}${mapFill(hex)}${suffix}`
+    (_match, prefix, hex, suffix) => `${prefix}${mapFill(hex, profile)}${suffix}`
   );
   output = output.replace(
     /(<w:highlight\b[^>]*\bw:val=")white(")/gi,
@@ -83,36 +94,37 @@ export function patchWordXml(xml: string): string {
   // references so patching the theme keeps inheritance and editability.
   output = output.replace(
     /(<w:color\b[^>]*\bw:val=")([0-9A-Fa-f]{6})(")/g,
-    (_match, prefix, hex, suffix) => `${prefix}${mapText(hex)}${suffix}`
+    (_match, prefix, hex, suffix) => `${prefix}${mapText(hex, profile)}${suffix}`
   );
 
   // Table borders, paragraph borders and drawing fills are independent from
   // text; map only neutral colours and keep accents, photos and diagrams.
   output = output.replace(
     /(<w:(?:top|left|bottom|right|insideH|insideV|start|end)\b[^>]*\bw:color=")([0-9A-Fa-f]{6})(")/g,
-    (_match, prefix, hex, suffix) => `${prefix}${mapNeutral(hex)}${suffix}`
+    (_match, prefix, hex, suffix) => `${prefix}${mapNeutral(hex, profile)}${suffix}`
   );
-  output = patchDrawingColors(output);
+  output = patchDrawingColors(output, profile);
 
   return output;
 }
 
-function patchDrawingColors(xml: string): string {
+function patchDrawingColors(xml: string, profile: ReturnType<typeof getConversionProfile>): string {
   return xml.replace(
     /(<a:solidFill>\s*<a:srgbClr\b[^>]*\bval=")([0-9A-Fa-f]{6})(")/g,
     (_match, prefix, hex, suffix, offset, source) => {
       const before = source.slice(0, offset);
       const inRunProperties = before.lastIndexOf("<a:rPr") > before.lastIndexOf("</a:rPr>");
-      const mapped = inRunProperties ? mapText(hex) : mapFill(hex);
+      const mapped = inRunProperties ? mapText(hex, profile) : mapFill(hex, profile);
       return `${prefix}${mapped}${suffix}`;
     }
   );
 }
 
-export function patchThemeXml(xml: string): string {
+export function patchThemeXml(xml: string, profileId?: ConversionProfileId): string {
+  const profile = getConversionProfile(profileId);
   let output = xml;
-  output = replaceThemeColor(output, "dk1", LIGHT_TEXT_HEX);
-  output = replaceThemeColor(output, "lt1", DARK_BG_HEX);
+  output = replaceThemeColor(output, "dk1", rgbToHex(profile.text));
+  output = replaceThemeColor(output, "lt1", rgbToHex(profile.background));
   return output;
 }
 
@@ -124,28 +136,35 @@ function replaceThemeColor(xml: string, name: string, value: string): string {
   return xml.replace(pattern, `<a:${name}><a:srgbClr val="${value}"/></a:${name}>`);
 }
 
-function mapBackground(hex: string): string {
+function mapBackground(hex: string, profile: ReturnType<typeof getConversionProfile>): string {
   const rgb = hexToRgb(hex);
-  return isNearWhite(rgb) ? DARK_BG_HEX : mapNeutral(hex);
+  return isNearWhite(rgb) ? rgbToHex(profile.background) : mapNeutral(hex, profile);
 }
 
-function mapFill(hex: string): string {
+function mapFill(hex: string, profile: ReturnType<typeof getConversionProfile>): string {
   const rgb = hexToRgb(hex);
-  if (isNearWhite(rgb)) return DARK_SURFACE_HEX;
-  if (isNearBlack(rgb)) return DARK_SURFACE_HEX;
+  if (isNearWhite(rgb)) return rgbToHex(profile.surface);
+  if (isNearBlack(rgb)) return rgbToHex(profile.surface);
   return hex.toUpperCase();
 }
 
-function mapText(hex: string): string {
+function mapText(hex: string, profile: ReturnType<typeof getConversionProfile>): string {
   const rgb = hexToRgb(hex);
-  return isNearBlack(rgb) ? LIGHT_TEXT_HEX : hex.toUpperCase();
+  return isNearBlack(rgb) ? rgbToHex(profile.text) : hex.toUpperCase();
 }
 
-function mapNeutral(hex: string): string {
+function mapNeutral(hex: string, profile: ReturnType<typeof getConversionProfile>): string {
   const rgb = hexToRgb(hex);
-  if (isNearWhite(rgb)) return DARK_SURFACE_HEX;
-  if (isNearBlack(rgb)) return LIGHT_TEXT_HEX;
+  if (isNearWhite(rgb)) return rgbToHex(profile.surface);
+  if (isNearBlack(rgb)) return rgbToHex(profile.text);
   return hex.toUpperCase();
+}
+
+function rgbToHex({ r, g, b }: { r: number; g: number; b: number }): string {
+  return [r, g, b]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {

@@ -10,8 +10,9 @@
 
 import type { NextRequest } from "next/server";
 import { verifyIdToken } from "@/lib/firebase-admin";
-import { updateConversion } from "@/lib/server/history-store";
+import { deleteConversion, updateConversion } from "@/lib/server/history-store";
 import {
+  handleDelete,
   handleUpdate,
   type HistoryHandlers,
 } from "@/lib/server/history-handlers";
@@ -24,6 +25,7 @@ const handlers: HistoryHandlers = {
     throw new Error("create() is not reachable from PATCH /api/history/[id]");
   },
   update: updateConversion,
+  remove: deleteConversion,
 };
 
 export async function PATCH(
@@ -32,4 +34,12 @@ export async function PATCH(
 ) {
   const { id } = await params;
   return handleUpdate(request, handlers, id);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return handleDelete(request, handlers, id);
 }

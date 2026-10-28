@@ -468,7 +468,10 @@ export default function LandingPage() {
             <p className="hero-sub" data-hero>
               <span className="hero-sub-lead">NOCTRA WAS.</span>{" "}
                Bright study documents, transformed into comfortable
-              dark-mode versions — in your browser, on your device.
+              dark-mode versions — in your browser, on your device.{" "}
+              <span className="hero-sub-lead">
+                Made for the dark. Optimized for OLED.
+              </span>
             </p>
 
             <div className="hero-actions" id="hero-cta" data-hero>
@@ -663,7 +666,7 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div className="sc-body sc-body--center">
-                  <h3 className="sc-title">Two formats</h3>
+                  <h3 className="sc-title">Three formats</h3>
                   <p className="sc-text">
                      PDF, DOCX or PPTX in. One dark-mode result out.
                   </p>
@@ -1637,7 +1640,12 @@ export default function LandingPage() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 14px;
+          /* Chips scale with the wheel itself (container query units); the
+             wheel lives in a narrow grid column, so viewport-based sizing
+             let the chip stack outgrow the circle on tablet/desktop. (Gap
+             stays fixed — a wheel cannot query its own container units.) */
+          container-type: inline-size;
+          gap: 10px;
           width: 74%;
           aspect-ratio: 1;
           border: 1px solid var(--border-default);
@@ -1646,7 +1654,7 @@ export default function LandingPage() {
         .format-chip {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(1.5rem, 4vw, 2.25rem);
+          font-size: clamp(0.875rem, 14cqw, 1.75rem);
           letter-spacing: -0.05em;
           color: var(--text-primary);
         }
@@ -1723,6 +1731,10 @@ export default function LandingPage() {
           .sc-card--circle .sc-media--circle {
             aspect-ratio: 1;
             max-width: 340px;
+            /* Definite width so the wheel's percentage (and the chips'
+               container-query sizes) resolve against the card, not against
+               shrink-to-fit content. */
+            width: 100%;
             margin-inline: auto;
           }
           .sc-card--band {

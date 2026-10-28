@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { UploadZone } from "@/components/UploadZone";
 import { ConversionList } from "@/components/ConversionList";
+import { BatchUploadZone } from "@/components/BatchUploadZone";
 import { useAuth } from "@/hooks/useAuth";
 import Image from "next/image";
 import Link from "next/link";
@@ -105,6 +106,7 @@ function DashboardContent() {
           {/* Upload */}
           <section aria-label="Upload document">
             <UploadZone onConversionSettled={handleConversionSettled} />
+            <BatchUploadZone />
           </section>
 
           {/* Conversion history */}

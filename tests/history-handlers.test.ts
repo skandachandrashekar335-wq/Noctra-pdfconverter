@@ -17,7 +17,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 
-const { handleList, handleCreate, handleUpdate } = await import(
+const { handleList, handleCreate, handleUpdate, handleDelete } = await import(
   "../src/lib/server/history-handlers.ts"
 );
 const { sanitizeStatusUpdate } = await import("../src/lib/history-row.ts");
@@ -295,6 +295,33 @@ describe("cross-user access denial", () => {
     assert.equal(updated?.status, "completed");
     assert.equal(updated?.page_count, 12);
     assert.ok(updated?.completed_at, "a terminal status records a timestamp");
+  });
+
+  test("Bob cannot delete Alice's record, while Alice can delete it", async () => {
+    const store = fakeStore();
+    const handlers = { ...handlersFor(store), remove: async (uid: string, id: string) => {
+      const row = store.rows.get(id);
+      if (!row || row.user_uid !== uid) return false;
+      store.rows.delete(id);
+      return true;
+    } };
+    const created = await handleCreate(req("/api/history", {
+      method: "POST", token: TOKENS.alice,
+      body: { originalFileName: "secret.pdf", originalFileSize: 1, fileType: "pdf", clientRef: "ref-1" },
+    }), handlers);
+    const { conversion } = await created.json() as { conversion: { id: string } };
+
+    const denied = await handleDelete(req(`/api/history/${conversion.id}`, {
+      method: "DELETE", token: TOKENS.bob,
+    }), handlers, conversion.id);
+    assert.equal(denied.status, 404);
+    assert.equal(store.rows.has(conversion.id), true);
+
+    const removed = await handleDelete(req(`/api/history/${conversion.id}`, {
+      method: "DELETE", token: TOKENS.alice,
+    }), handlers, conversion.id);
+    assert.equal(removed.status, 204);
+    assert.equal(store.rows.has(conversion.id), false);
   });
 });
 

@@ -19,6 +19,10 @@ export interface ConversionRow {
   original_file_name: string;
   original_file_size: number;
   output_file_name: string | null;
+  display_name: string | null;
+  is_favorite: boolean | null;
+  tags: string[] | null;
+  document_key: string | null;
   file_type: string;
   status: string;
   page_count: number | null;
@@ -32,6 +36,7 @@ const STATUSES: readonly ConversionStatus[] = [
   "processing",
   "completed",
   "failed",
+  "cancelled",
 ];
 
 /**
@@ -72,6 +77,16 @@ function toOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function toTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(
+    value
+      .filter((tag): tag is string => typeof tag === "string")
+      .map((tag) => tag.trim().slice(0, 40))
+      .filter(Boolean)
+  )].slice(0, 20);
+}
+
 /**
  * Map a database row to the `Conversion` shape the history UI expects.
  *
@@ -86,6 +101,10 @@ export function rowToConversion(row: ConversionRow): Conversion {
     originalFileName: row.original_file_name,
     originalFileSize: Number(row.original_file_size) || 0,
     outputFileName: toOptionalString(row.output_file_name),
+    displayName: toOptionalString(row.display_name),
+    isFavorite: row.is_favorite === true,
+    tags: toTags(row.tags),
+    documentKey: toOptionalString(row.document_key),
     fileType: toFileType(row.file_type),
     status: toConversionStatus(row.status),
     createdAt: toUnixMs(row.created_at),
@@ -131,6 +150,7 @@ const WRITABLE_STATUSES = new Set<ConversionStatus>([
   "processing",
   "completed",
   "failed",
+  "cancelled",
 ]);
 
 /**
@@ -150,6 +170,10 @@ export function sanitizeStatusUpdate(input: {
   pageCount?: unknown;
   errorMessage?: unknown;
   outputFileName?: unknown;
+  displayName?: unknown;
+  isFavorite?: unknown;
+  tags?: unknown;
+  documentKey?: unknown;
 }): Record<string, unknown> | null {
   const patch: Record<string, unknown> = {};
 
@@ -174,6 +198,18 @@ export function sanitizeStatusUpdate(input: {
   }
   if (typeof input.outputFileName === "string" && input.outputFileName.length) {
     patch.output_file_name = input.outputFileName.slice(0, 512);
+  }
+  if (typeof input.displayName === "string" && input.displayName.trim().length) {
+    patch.display_name = input.displayName.trim().slice(0, 512);
+  }
+  if (typeof input.isFavorite === "boolean") {
+    patch.is_favorite = input.isFavorite;
+  }
+  if (Array.isArray(input.tags)) {
+    patch.tags = toTags(input.tags);
+  }
+  if (typeof input.documentKey === "string" && /^[0-9a-f]{64}$/.test(input.documentKey)) {
+    patch.document_key = input.documentKey;
   }
   if (terminal) {
     // Server clock, not client clock: the client never supplies this.

@@ -157,8 +157,6 @@ heading("Environment variables");
 const SERVER_ONLY = [
   ["SUPABASE_URL", "Supabase Dashboard -> Project Settings -> API -> Project URL"],
   ["FIREBASE_ADMIN_PROJECT_ID", "must equal the project that issues your tokens"],
-  ["FIREBASE_ADMIN_CLIENT_EMAIL", "Firebase Console -> Project settings -> Service accounts"],
-  ["FIREBASE_ADMIN_PRIVATE_KEY", "Firebase Console -> Service accounts -> Generate new private key"],
 ];
 
 for (const [key, hint] of SERVER_ONLY) {
@@ -173,6 +171,29 @@ for (const [key, hint] of SERVER_ONLY) {
   } else {
     pass(key + " is set", mask(env[key]));
   }
+}
+
+// The service-account credential is OPTIONAL: token verification uses
+// Google's public x509 certs and needs only the project ID. A credential is
+// only required for Admin *write* APIs, which this app never calls. What is
+// never acceptable is a HALF-set credential — a key without its email (or an
+// email without a key) means someone edited one var and not the other.
+const emailSet = isSet("FIREBASE_ADMIN_CLIENT_EMAIL") && !isPlaceholder("FIREBASE_ADMIN_CLIENT_EMAIL");
+const keySet = isSet("FIREBASE_ADMIN_PRIVATE_KEY") && !isPlaceholder("FIREBASE_ADMIN_PRIVATE_KEY");
+
+if (emailSet && keySet) {
+  pass("Firebase service-account credential is fully configured");
+} else if (!isSet("FIREBASE_ADMIN_CLIENT_EMAIL") && !isSet("FIREBASE_ADMIN_PRIVATE_KEY")) {
+  pass(
+    "Firebase Admin runs credential-less (project ID only)",
+    "verification uses Google's public certs; no private key exists to leak"
+  );
+} else {
+  fail(
+    "Firebase service-account credential is only half configured",
+    "client email " + (emailSet ? "set" : "missing") + ", private key " + (keySet ? "set" : "missing"),
+    "Either set BOTH FIREBASE_ADMIN_CLIENT_EMAIL and FIREBASE_ADMIN_PRIVATE_KEY, or remove BOTH — never one without the other."
+  );
 }
 
 const activeSupabaseKeyName = supabaseServerKeyName();
@@ -226,11 +247,12 @@ if (leakyKeys.length > 0) {
 
 heading("Firebase Admin token verification");
 
-const adminUsable =
+const adminProjectUsable =
   isSet("FIREBASE_ADMIN_PROJECT_ID") &&
-  !isPlaceholder("FIREBASE_ADMIN_PROJECT_ID") &&
-  isSet("FIREBASE_ADMIN_PRIVATE_KEY") &&
-  !isPlaceholder("FIREBASE_ADMIN_PRIVATE_KEY");
+  !isPlaceholder("FIREBASE_ADMIN_PROJECT_ID");
+
+const adminUsable = adminProjectUsable && emailSet && keySet;
+const credentialLess = adminProjectUsable && !isSet("FIREBASE_ADMIN_CLIENT_EMAIL") && !isSet("FIREBASE_ADMIN_PRIVATE_KEY");
 
 if (adminUsable) {
   try {
@@ -301,6 +323,95 @@ if (adminUsable) {
       "Could not initialise the Firebase Admin SDK",
       error && error.message ? error.message : String(error),
       "Check FIREBASE_ADMIN_PRIVATE_KEY keeps its literal \\n escapes."
+    );
+  }
+} else if (credentialLess) {
+  // Credential-less mode: the Admin SDK verifies tokens against Google's
+  // public x509 certs using only the project ID. Prove both halves: the SDK
+  // initialises without any credential, and verification still reaches real
+  // token validation (rejecting a well-formed fake JWT's signature) rather
+  // than failing earlier on a missing credential.
+  try {
+    const { initializeApp, getApps, deleteApp } = await import(
+      "firebase-admin/app"
+    );
+    const { getAuth } = await import("firebase-admin/auth");
+
+    for (const app of [...getApps()]) await deleteApp(app);
+    initializeApp({ projectId: env.FIREBASE_ADMIN_PROJECT_ID.trim() });
+    pass("Admin SDK initialises with project ID only (no private key)");
+
+    const auth = getAuth();
+
+    try {
+      await auth.verifyIdToken("garbage-token-for-probe");
+      fail(
+        "verifyIdToken accepted a garbage token",
+        undefined,
+        "That should be impossible. Treat as a bug."
+      );
+    } catch (error) {
+      const code = error && error.code ? error.code : "unknown";
+      if (code === "app/invalid-credential") {
+        fail(
+          "The Admin SDK reports a credential problem despite credential-less mode",
+          code,
+          "Remove any half-set FIREBASE_ADMIN_CLIENT_EMAIL / FIREBASE_ADMIN_PRIVATE_KEY pair."
+        );
+      } else {
+        pass("verifyIdToken rejects a garbage token", "code: " + code);
+      }
+    }
+
+    // A well-formed JWT with a real kid: reaching a signature/argument error
+    // proves the public-cert fetch path is alive, which is the entire
+    // verification dependency in credential-less mode.
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const fakeJwt =
+      b64({ alg: "RS256", typ: "JWT", kid: "904b0f91be6eb0867dabbaab587dfc2e33f00a24" }) +
+      "." +
+      b64({
+        iss: "https://securetoken.google.com/" + env.FIREBASE_ADMIN_PROJECT_ID.trim(),
+        aud: env.FIREBASE_ADMIN_PROJECT_ID.trim(),
+        user_id: "verify-probe-uid",
+        sub: "verify-probe-uid",
+        iat: Math.floor(Date.now() / 1000) - 60,
+        exp: Math.floor(Date.now() / 1000) + 300,
+        auth_time: Math.floor(Date.now() / 1000) - 60,
+      }) +
+      ".c2lnbmF0dXJl";
+    try {
+      await auth.verifyIdToken(fakeJwt);
+      fail(
+        "verifyIdToken accepted a fake-signature JWT",
+        undefined,
+        "That should be impossible. Treat as a bug."
+      );
+    } catch (error) {
+      const code = error && error.code ? error.code : "unknown";
+      const msg = error && error.message ? error.message : String(error);
+      if (/invalid signature/i.test(msg)) {
+        pass(
+          "Public-cert verification path is alive",
+          "reached signature validation with no private key configured"
+        );
+      } else if (/fetch failed|ENOTFOUND|ECONNREFUSED|network/i.test(msg)) {
+        fail(
+          "Could not reach Google's public certificate endpoint",
+          msg,
+          "Token verification depends on this endpoint; check network egress."
+        );
+      } else {
+        fail("Unexpected verification failure in credential-less mode", code + ": " + msg.slice(0, 120));
+      }
+    }
+
+    for (const app of [...getApps()]) await deleteApp(app);
+  } catch (error) {
+    fail(
+      "Could not initialise the Firebase Admin SDK without a credential",
+      error && error.message ? error.message : String(error),
+      "Credential-less verification requires only FIREBASE_ADMIN_PROJECT_ID."
     );
   }
 } else {

@@ -196,6 +196,21 @@ describe("status update whitelist", () => {
     const patch = sanitizeStatusUpdate({ status: "failed", errorMessage: "x".repeat(5000) });
     assert.equal(String(patch?.error_message).length, 2000);
   });
+
+  test("organization metadata is whitelisted and normalized", () => {
+    const patch = sanitizeStatusUpdate({
+      isFavorite: true,
+      tags: [" exam ", "exam", "notes"],
+      displayName: "  Biology  ",
+      documentKey: "a".repeat(64),
+    });
+    assert.deepEqual(patch, {
+      is_favorite: true,
+      tags: ["exam", "notes"],
+      display_name: "Biology",
+      document_key: "a".repeat(64),
+    });
+  });
 });
 
 describe("ordered history updates", () => {

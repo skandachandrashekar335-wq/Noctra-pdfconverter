@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { applyDarkTransform } from "../src/lib/pdf-converter.ts";
+import { getConversionProfile } from "../src/lib/conversion-profiles.ts";
 
 /** Helper: run one pixel through the transform */
 function transform(r: number, g: number, b: number, a = 255): [number, number, number, number] {
@@ -47,6 +48,13 @@ describe("applyDarkTransform — paper and ink", () => {
     const out = transform(128, 128, 128);
     assert.ok(brightness(out) < 128, "mid-tones should darken");
     assert.ok(brightness(out) > 0, "mid-tones should stay visible");
+  });
+
+  test("anti-aliased neutral text stays continuous instead of becoming dotted", () => {
+    const samples = [69, 70, 71, 179, 180, 181].map((value) => brightness(transform(value, value, value)));
+    for (const value of samples) assert.ok(value > 20, `neutral sample was crushed to ${value}`);
+    assert.ok(Math.abs(samples[1] - samples[2]) < 10, "text threshold should be continuous");
+    assert.ok(Math.abs(samples[3] - samples[4]) < 20, "paper threshold should be continuous");
   });
 });
 
@@ -113,5 +121,69 @@ describe("applyDarkTransform — coloured content preservation", () => {
       Array.from({ length: pixels }, (_, i) => data[i * 4 + 3]),
       alphas
     );
+  });
+});
+
+describe("applyDarkTransform — conversion profiles", () => {
+  function transformWith(
+    r: number,
+    g: number,
+    b: number,
+    profileId?: Parameters<typeof getConversionProfile>[0]
+  ): [number, number, number] {
+    const data = new Uint8ClampedArray([r, g, b, 255]);
+    applyDarkTransform(data, getConversionProfile(profileId));
+    return [data[0], data[1], data[2]];
+  }
+
+  test("white paper maps to the selected profile's background", () => {
+    // t = 1 for pure white, so the result is exactly the profile background.
+    assert.deepEqual(transformWith(255, 255, 255, "oled-black"), [18, 18, 26]);
+    assert.deepEqual(transformWith(255, 255, 255, "warm-sepia"), [43, 36, 30]);
+    assert.deepEqual(transformWith(255, 255, 255, "charcoal-dark"), [28, 30, 34]);
+    assert.deepEqual(transformWith(255, 255, 255, "low-contrast-night"), [
+      24, 25, 31,
+    ]);
+  });
+
+  test("black ink maps to the selected profile's text colour", () => {
+    assert.deepEqual(transformWith(0, 0, 0, "oled-black"), [230, 230, 235]);
+    assert.deepEqual(transformWith(0, 0, 0, "warm-sepia"), [239, 224, 198]);
+  });
+
+  test("undefined profile falls back to OLED Black (stable default output)", () => {
+    assert.deepEqual(transformWith(255, 255, 255, undefined), [18, 18, 26]);
+  });
+
+  test("low-contrast-night dims very bright colourful pixels more strongly", () => {
+    // The one profile-specific branch: bright photo pixels get an extra
+    // gentle dim on the muted palette.
+    const night = transformWith(255, 255, 120, "low-contrast-night");
+    const oled = transformWith(255, 255, 120, "oled-black");
+    assert.deepEqual(night, [158, 158, 74], "0.62 factor for low-contrast-night");
+    assert.deepEqual(oled, [191, 191, 90], "0.75 factor for the default palette");
+  });
+});
+
+describe("applyDarkTransform — measured quality stats", () => {
+  test("classifies every pixel into exactly one bucket", () => {
+    const data = new Uint8ClampedArray([
+      255, 255, 255, 255, // paper
+      0, 0, 0, 255, // ink
+      128, 128, 128, 255, // neutral midtone
+      255, 0, 0, 255, // colourful
+    ]);
+    const stats = { total: 0, paper: 0, ink: 0, midtone: 0, colourful: 0 };
+    applyDarkTransform(data, getConversionProfile("oled-black"), stats);
+    assert.deepEqual(stats, { total: 4, paper: 1, ink: 1, midtone: 1, colourful: 1 });
+    // Buckets must partition the buffer: nothing lost, nothing double-counted.
+    assert.equal(stats.paper + stats.ink + stats.midtone + stats.colourful, stats.total);
+  });
+
+  test("omit stats and the transform still runs unchanged", () => {
+    const data = new Uint8ClampedArray([255, 255, 255, 255]);
+    applyDarkTransform(data);
+    assert.equal(data.length, 4);
+    assert.deepEqual([data[0], data[1], data[2]], [18, 18, 26]);
   });
 });

@@ -52,7 +52,16 @@ function getAdminApp(): App {
       ? cert({ projectId, clientEmail, privateKey })
       : undefined;
 
-  return initializeApp({ credential, projectId });
+  // The Admin SDK validates the *shape* of the options object: if the
+  // `credential` key is present at all it must be a Credential instance.
+  // Passing `credential: undefined` is therefore rejected outright
+  // ("The "credential" property must be an object which implements the
+  // Credential interface"), which silently defeated the public-x509
+  // verification fallback documented above. Build the options without that
+  // key whenever there is no credential to put in it.
+  return credential
+    ? initializeApp({ credential, projectId })
+    : initializeApp({ projectId });
 }
 
 /** Auth instance used to verify incoming ID tokens. */

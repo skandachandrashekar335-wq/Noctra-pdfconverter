@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
 
+  // Hide the floating development indicator in `next dev`. Compile and
+  // runtime errors still surface normally — this only removes the badge.
+  devIndicators: false,
+
   images: {
     // Google profile photos (Google Sign-In) are served from
     // lh3.googleusercontent.com — allow them for next/image in the dashboard.

@@ -47,22 +47,42 @@ export interface HistoryTracker {
   flush(): Promise<void>;
 }
 
+export interface HistoryTrackerOptions {
+  /**
+   * Adopt an existing record instead of creating a new one. Used by the
+   * retry path: re-running a failed conversion updates the record the first
+   * attempt already wrote, so one document failure + retry produces exactly
+   * one history entry, not two.
+   */
+  initialId?: string;
+  /**
+   * Fires once (with the record id) when creation succeeds, so the UI can
+   * remember the id for a later retry. Not called when `initialId` was
+   * supplied or when creation fails.
+   */
+  onCreated?: (id: string) => void;
+}
+
 export function createHistoryTracker(
   store: HistoryStore | null,
   initialData: Record<string, unknown>,
-  onWarn: (message: string) => void = console.warn
+  onWarn: (message: string) => void = console.warn,
+  options: HistoryTrackerOptions = {}
 ): HistoryTracker {
-  let id: string | null = null;
+  // `initialId` adopts an existing record (retry path): creation is skipped
+  // and every write targets the adopted id immediately.
+  let id: string | null = options.initialId ?? null;
 
   // Start creation now; map both outcomes so the chain never rejects and
   // always settles when the backend responds (or never settles if it hangs —
   // which is fine: queued writes would have no id to target anyway).
   let tail: Promise<void> = Promise.resolve();
-  if (store) {
+  if (store && !options.initialId) {
     const s = store;
     tail = s.create(initialData).then(
       (createdId) => {
         id = createdId;
+        options.onCreated?.(createdId);
       },
       (err: unknown) => {
         id = null;

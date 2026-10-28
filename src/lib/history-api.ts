@@ -12,6 +12,7 @@
 
 import { auth } from "@/lib/firebase";
 import type { HistoryStore } from "@/lib/history-tracker";
+import type { Conversion } from "@/types";
 
 /** Why a history operation failed. Drives the message the UI shows. */
 export type HistoryFailureReason =
@@ -245,4 +246,35 @@ export async function fetchHistory(
   getToken: TokenProvider = defaultTokenProvider
 ): Promise<Response> {
   return historyFetch("/api/history?limit=20", {}, getToken);
+}
+
+/** Delete one of the signed-in user's history records. */
+export async function deleteHistory(
+  id: string,
+  getToken: TokenProvider = defaultTokenProvider
+): Promise<void> {
+  await historyFetch(
+    `/api/history/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    getToken
+  );
+}
+
+/** Update owner-scoped organization metadata on a history row. */
+export async function updateHistory(
+  id: string,
+  patch: Pick<Conversion, "displayName" | "isFavorite" | "tags">,
+  getToken: TokenProvider = defaultTokenProvider
+): Promise<Conversion> {
+  const response = await historyFetch(
+    `/api/history/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    },
+    getToken
+  );
+  const body = (await response.json()) as { conversion?: Conversion };
+  if (!body.conversion) throw new HistorySaveError("History service returned no updated record.", "bad-response");
+  return body.conversion;
 }

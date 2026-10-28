@@ -3,6 +3,7 @@
 // Deterministic, synthetic browser-QA fixtures. These contain no real user
 // data and are intentionally small enough for local manual smoke tests.
 import { mkdir, writeFile } from "node:fs/promises";
+import { deflateSync } from "node:zlib";
 import { resolve } from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import JSZip from "jszip";
@@ -197,6 +198,179 @@ function addPptxPackage(zip) {
   );
 }
 
+/**
+ * 13-page regression fixture — mirrors the "Data_Encoding.pdf, 13/13 pages,
+ * stuck at 95%" report. Page 13 carries the heaviest content (largest drawn
+ * regions) so finalisation work after the last progress tick is realistic.
+ */
+async function writeMultipagePdf() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  for (let i = 1; i <= 13; i++) {
+    const page = pdf.addPage([612, 792]);
+    page.drawRectangle({ x: 0, y: 0, width: 612, height: 792, color: rgb(1, 1, 1) });
+    page.drawText(`Data Encoding — chapter ${i}`, {
+      x: 72,
+      y: 720,
+      size: 20,
+      font,
+      color: rgb(0.05, 0.05, 0.1),
+    });
+    for (let line = 0; line < 14; line++) {
+      page.drawText(
+        `Line ${line + 1} of page ${i}: synthetic paragraph text for the 13-page hang regression.`,
+        { x: 72, y: 680 - line * 34, size: 12, font, color: rgb(0.13, 0.13, 0.18) }
+      );
+    }
+    // Gray table-like band.
+    page.drawRectangle({
+      x: 72,
+      y: 160,
+      width: 468,
+      height: 90,
+      color: rgb(0.93, 0.93, 0.95),
+      borderColor: rgb(0.4, 0.4, 0.45),
+      borderWidth: 1,
+    });
+    // Colored chart bars (colour-preservation path).
+    const bars = [0.85, 0.55, 0.3];
+    bars.forEach((h, idx) => {
+      page.drawRectangle({
+        x: 96 + idx * 60,
+        y: 168,
+        width: 44,
+        height: h * 74,
+        color: rgb(0.9 - idx * 0.2, 0.35 + idx * 0.2, 0.45),
+      });
+    });
+    if (i === 13) {
+      // Heavier final page: bigger fills + more text, worst-case finalisation.
+      page.drawRectangle({ x: 48, y: 300, width: 516, height: 200, color: rgb(0.96, 0.96, 0.98) });
+      for (let extra = 0; extra < 40; extra++) {
+        page.drawText(`Appendix row ${extra + 1}`, {
+          x: 64,
+          y: 480 - extra * 4,
+          size: 8,
+          font,
+          color: rgb(0.2, 0.2, 0.25),
+        });
+      }
+    }
+    page.drawText(`Page ${i} of 13 · synthetic QA only · no personal data`, {
+      x: 72,
+      y: 72,
+      size: 10,
+      font,
+      color: rgb(0.35, 0.35, 0.4),
+    });
+  }
+  await writeFile(resolve(OUT, "noctra-qa-13.pdf"), await pdf.save());
+}
+
+// ── Heavy fixture helpers ────────────────────────────────────────────────
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = -1;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const typeBuf = Buffer.from(type, "latin1");
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])));
+  return Buffer.concat([len, typeBuf, data, crc]);
+}
+
+/** Deterministic 8-bit grayscale PNG (no colour type, filter 0 rows). */
+function grayPng(width, height, pixels) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 0; // grayscale
+  const rows = Buffer.alloc(height * (width + 1));
+  for (let y = 0; y < height; y++) {
+    rows[y * (width + 1)] = 0;
+    pixels.copy(rows, y * (width + 1) + 1, y * width, (y + 1) * width);
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", deflateSync(rows, { level: 6 })),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+/** mulberry32 — deterministic PRNG so the fixture never changes. */
+function prng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Image-heavy 13-page fixture ("scanned" look): poster-sized pages whose
+ * content is a full-page noise image + text. Worst realistic case for the
+ * finalisation tail: large canvases to transform, high-entropy JPEG to
+ * encode after the last progress tick.
+ */
+async function writeHeavyPdf() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+
+  const W = 1224;
+  const H = 1584;
+  const rnd = prng(0x5eed);
+  const noise = Buffer.alloc(W * H);
+  for (let i = 0; i < noise.length; i++) {
+    // Mostly light background with structured darker patches so it still
+    // looks like a scanned page rather than pure static.
+    const base = 215 + Math.floor(rnd() * 40);
+    const patch = (i % 977) < 120 ? 90 : 0;
+    noise[i] = Math.max(0, Math.min(255, base - patch + Math.floor(rnd() * 25)));
+  }
+  const img = await pdf.embedPng(grayPng(W, H, noise));
+
+  for (let i = 1; i <= 13; i++) {
+    const page = pdf.addPage([612, 792]);
+    page.drawImage(img, { x: 0, y: 0, width: 612, height: 792 });
+    page.drawText(`Scanned chapter ${i}`, {
+      x: 48,
+      y: 740,
+      size: 22,
+      font,
+      color: rgb(0.05, 0.05, 0.08),
+    });
+    for (let line = 0; line < 20; line++) {
+      page.drawText(`OCR-like line ${line + 1} on page ${i} (synthetic).`, {
+        x: 48,
+        y: 700 - line * 28,
+        size: 11,
+        font,
+        color: rgb(0.1, 0.1, 0.14),
+      });
+    }
+  }
+  await writeFile(resolve(OUT, "noctra-qa-heavy.pdf"), await pdf.save());
+}
+
 async function writeOfficeFixtures() {
   const docx = new JSZip();
   addDocxPackage(docx);
@@ -215,5 +389,7 @@ async function writeOfficeFixtures() {
 
 await mkdir(OUT, { recursive: true });
 await writePdf();
+await writeMultipagePdf();
+await writeHeavyPdf();
 await writeOfficeFixtures();
 console.log("Created deterministic synthetic fixtures in qa-fixtures/");

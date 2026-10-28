@@ -28,25 +28,94 @@ import {
   copyLinkAnnotations,
   drawInvisibleTextLayer,
 } from "./pdf-text-layer.ts";
+import {
+  getConversionProfile,
+  type ConversionProfile,
+  type ConversionProfileId,
+} from "./conversion-profiles.ts";
 
 // PDF.js and pdf-lib are loaded lazily to avoid SSR issues
 type PDFDocumentProxy = import("pdfjs-dist").PDFDocumentProxy;
 
-// Dark palette constants
-const DARK_BG = { r: 18, g: 18, b: 24 }; // near-black background
-const DARK_SURFACE = { r: 28, g: 28, b: 38 }; // slightly lighter surface
-const LIGHT_TEXT = { r: 230, g: 230, b: 235 }; // off-white text
+/**
+ * Reject with an AbortError as soon as `signal` fires, without waiting on
+ * `promise`. Used for pdf.js awaits that a cancellation must not be stuck
+ * behind (a wedged worker would otherwise keep the conversion alive after
+ * the orchestrator has already settled it).
+ *
+ * The underlying promise's eventual settlement is ignored; listeners are
+ * always removed so repeated conversions do not accumulate them.
+ */
+function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) {
+    return Promise.reject(new DOMException("Conversion cancelled.", "AbortError"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () =>
+      reject(new DOMException("Conversion cancelled.", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      }
+    );
+  });
+}
 
-/** Convert a single PDF file (as ArrayBuffer) to a dark-mode PDF (as Uint8Array) */
+const abortError = () => new DOMException("Conversion cancelled.", "AbortError");
+
+/**
+ * Finalisation labels reported between the last page tick and a valid
+ * output, so the UI can show that export work is still happening.
+ */
+export type FinalizingReporter = (label: string) => void;
+
+/**
+ * Pixel-classification counters gathered while the dark transform runs.
+ * Every number is measured from the actual rendered pixels — the quality
+ * report never estimates.
+ */
+export interface PdfPixelStats {
+  /** Total pixels examined across all pages. */
+  total: number;
+  /** Low-saturation near-white pixels remapped to the dark background. */
+  paper: number;
+  /** Low-saturation near-black pixels remapped to the light text colour. */
+  ink: number;
+  /** Neutral mid-tones eased toward the dark surface. */
+  midtone: number;
+  /** Saturated/photo pixels preserved (dimmed only when very bright). */
+  colourful: number;
+}
+
+export interface PdfConversionResult {
+  bytes: Uint8Array;
+  pages: number;
+  profileId: ConversionProfileId;
+  stats: PdfPixelStats;
+}
+
+/** Convert a single PDF file (as ArrayBuffer) to a dark-mode PDF */
 export async function convertPdfToDarkMode(
   inputBuffer: ArrayBuffer,
-  onProgress?: (page: number, total: number) => void
-): Promise<Uint8Array> {
+  onProgress?: (page: number, total: number) => void,
+  profileId?: ConversionProfileId,
+  signal?: AbortSignal,
+  onFinalizing?: FinalizingReporter
+): Promise<PdfConversionResult> {
+  const profile = getConversionProfile(profileId);
   // Lazy load to avoid SSR and keep initial bundle small
   const [pdfjsLib, { PDFDocument, StandardFonts }] = await Promise.all([
     import("pdfjs-dist"),
     import("pdf-lib"),
   ]);
+  if (signal?.aborted) throw abortError();
 
   // In the browser, point the worker at the locally bundled pdf.js worker
   // file — no third-party CDN request is made during conversion (privacy +
@@ -62,8 +131,62 @@ export async function convertPdfToDarkMode(
   }
 
   const loadingTask = pdfjsLib.getDocument({ data: inputBuffer });
-  const pdfDoc: PDFDocumentProxy = await loadingTask.promise;
+  try {
+    return await renderDarkPdf({
+      loadingTask,
+      profile,
+      onProgress,
+      signal,
+      onFinalizing,
+      PDFDocument,
+      StandardFonts,
+    });
+  } finally {
+    // Always terminate the pdf.js worker and release the source document —
+    // on success, failure, cancellation and stall alike. pdf.js tolerates
+    // repeated destroy() calls; a teardown error must not mask the result.
+    try {
+      await Promise.resolve(loadingTask.destroy());
+    } catch {
+      /* worker already gone */
+    }
+  }
+}
+
+interface RenderDarkPdfArgs {
+  /** The pdf.js loading task: source of the document and its worker. */
+  loadingTask: {
+    promise: Promise<PDFDocumentProxy>;
+    destroy(): Promise<void> | void;
+  };
+  profile: ConversionProfile;
+  onProgress?: (page: number, total: number) => void;
+  signal?: AbortSignal;
+  onFinalizing?: FinalizingReporter;
+  PDFDocument: typeof import("pdf-lib").PDFDocument;
+  StandardFonts: typeof import("pdf-lib").StandardFonts;
+}
+
+async function renderDarkPdf({
+  loadingTask,
+  profile,
+  onProgress,
+  signal,
+  onFinalizing,
+  PDFDocument,
+  StandardFonts,
+}: RenderDarkPdfArgs): Promise<PdfConversionResult> {
+  const pdfDoc: PDFDocumentProxy = await raceAbort(loadingTask.promise, signal);
   const numPages = pdfDoc.numPages;
+
+  // Measured across every page: feeds the OLED quality report.
+  const stats: PdfPixelStats = {
+    total: 0,
+    paper: 0,
+    ink: 0,
+    midtone: 0,
+    colourful: 0,
+  };
 
   const outputPdf = await PDFDocument.create();
   // Helvetica for the invisible text layer (WinAnsi; see pdf-text-layer.ts)
@@ -83,6 +206,7 @@ export async function convertPdfToDarkMode(
   const pendingLinkPages: PendingLinkPage[] = [];
 
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    if (signal?.aborted) throw abortError();
     onProgress?.(pageNum, numPages);
 
     const page = await pdfDoc.getPage(pageNum);
@@ -97,22 +221,30 @@ export async function convertPdfToDarkMode(
     const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
     // Fill with our dark background before rendering PDF content
-    ctx.fillStyle = `rgb(${DARK_BG.r},${DARK_BG.g},${DARK_BG.b})`;
+    ctx.fillStyle = `rgb(${profile.background.r},${profile.background.g},${profile.background.b})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // pdfjs-dist v6 requires a `canvas` property on RenderParameters
     // alongside canvasContext. We cast to avoid a strict-type mismatch
     // while still supplying both properties the renderer needs.
-    await page.render({
+    const renderTask = page.render({
       canvasContext: ctx,
       viewport,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       canvas: canvas as any,
-    } as Parameters<typeof page.render>[0]).promise;
+    } as Parameters<typeof page.render>[0]);
+    const abortRender = () => renderTask.cancel?.();
+    signal?.addEventListener("abort", abortRender, { once: true });
+    try {
+      await renderTask.promise;
+    } finally {
+      signal?.removeEventListener("abort", abortRender);
+    }
+    if (signal?.aborted) throw new DOMException("Conversion cancelled.", "AbortError");
 
     // Apply intelligent dark transform to pixel data
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    applyDarkTransform(imageData.data);
+    applyDarkTransform(imageData.data, profile, stats);
     ctx.putImageData(imageData, 0, 0);
 
     // Export as JPEG (good balance of quality vs size for dark images)
@@ -121,13 +253,16 @@ export async function convertPdfToDarkMode(
       typeof OffscreenCanvas !== "undefined" &&
       canvas instanceof OffscreenCanvas
     ) {
-      const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
+      const blob = await raceAbort(
+        canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 }),
+        signal
+      );
       jpegBytes = new Uint8Array(await blob.arrayBuffer());
     } else if (
       typeof HTMLCanvasElement !== "undefined" &&
       canvas instanceof HTMLCanvasElement
     ) {
-      const blob = await canvasToBlob(canvas);
+      const blob = await raceAbort(canvasToBlob(canvas), signal);
       jpegBytes = new Uint8Array(await blob.arrayBuffer());
     } else {
       // Node.js path via sharp
@@ -140,6 +275,9 @@ export async function convertPdfToDarkMode(
         .toBuffer()
         .then((b) => new Uint8Array(b));
     }
+    // Encoding is the longest single-page step — check again before the
+    // embed/text-layer work so cancellation stays responsive.
+    if (signal?.aborted) throw abortError();
 
     // Original page dimensions (points, 72dpi)
     const scaleOneViewport = page.getViewport({ scale: 1 });
@@ -161,34 +299,49 @@ export async function convertPdfToDarkMode(
     // positioned exactly over the rasterised glyphs. Best-effort: a failure
     // here must never lose the converted PDF.
     try {
-      const textContent = await page.getTextContent();
+      const textContent = await raceAbort(page.getTextContent(), signal);
       const runs = buildTextLayer(textContent.items, scaleOneViewport);
       drawInvisibleTextLayer(outPage, layerFont, runs);
     } catch (err) {
+      if (signal?.aborted) throw abortError();
       console.warn(`Noctra: text layer skipped on page ${pageNum}`, err);
     }
 
     // Collect link annotations to re-create once every output page exists
     // (internal destinations may target later pages).
     try {
-      const annotations = await page.getAnnotations({ intent: "display" });
+      const annotations = await raceAbort(
+        page.getAnnotations({ intent: "display" }),
+        signal
+      );
       if (annotations.some((a) => a.subtype === "Link")) {
         pendingLinkPages.push({ outPage, annotations, viewport: scaleOneViewport });
       }
     } catch (err) {
+      if (signal?.aborted) throw abortError();
       console.warn(`Noctra: annotations skipped on page ${pageNum}`, err);
     }
   }
 
+  if (signal?.aborted) throw abortError();
+
   // Second pass: re-create link annotations now that every output page ref
   // is known. Internal destinations resolve through the input->output map.
-  for (const { outPage, annotations, viewport } of pendingLinkPages) {
-    copyLinkAnnotations(outputPdf, outPage, annotations, viewport, (ref) => {
-      return outputPagesByRefNum.get(ref.num as number) ?? null;
-    });
+  if (pendingLinkPages.length > 0) {
+    onFinalizing?.("Restoring links…");
+    for (const { outPage, annotations, viewport } of pendingLinkPages) {
+      copyLinkAnnotations(outputPdf, outPage, annotations, viewport, (ref) => {
+        return outputPagesByRefNum.get(ref.num as number) ?? null;
+      });
+    }
   }
 
-  return outputPdf.save();
+  // Serialization is single-threaded and can take a while on large documents
+  // — announce it so the UI shows export work instead of a frozen percentage.
+  onFinalizing?.("Serializing the dark PDF…");
+  if (signal?.aborted) throw abortError();
+  const bytes = await outputPdf.save();
+  return { bytes, pages: numPages, profileId: profile.id, stats };
 }
 
 /**
@@ -200,7 +353,12 @@ export async function convertPdfToDarkMode(
  *  - "Colourful / photographic": desaturate slightly + blend toward dark surface
  *    but leave mostly intact so diagrams / photos stay recognisable
  */
-export function applyDarkTransform(data: Uint8ClampedArray): void {
+export function applyDarkTransform(
+  data: Uint8ClampedArray,
+  profile: ConversionProfile = getConversionProfile(undefined),
+  stats?: PdfPixelStats
+): void {
+  if (stats) stats.total += data.length / 4;
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -210,34 +368,42 @@ export function applyDarkTransform(data: Uint8ClampedArray): void {
     const saturation = getPerceivedSaturation(r, g, b);
 
     if (saturation < 30) {
-      // Low-saturation pixel: treat as paper or text
-      if (brightness > 180) {
+      // Low-saturation pixel: treat as paper or text. The three ranges are
+      // deliberately continuous at 70 and 180. The old hard branches mapped
+      // 79 → light text but 80 → dark grey, and 179 → mid-grey but 180 → paper;
+      // anti-aliased glyph edges could therefore become dotted/noisy.
+      if (brightness >= 180) {
+        if (stats) stats.paper++;
         // Near-white paper background → dark background
         // Blend smoothly based on how white it is
         const t = (brightness - 180) / 75; // 0..1
-        data[i] = lerp(DARK_SURFACE.r, DARK_BG.r, t);
-        data[i + 1] = lerp(DARK_SURFACE.g, DARK_BG.g, t);
-        data[i + 2] = lerp(DARK_SURFACE.b, DARK_BG.b, t);
-      } else if (brightness < 80) {
+        data[i] = lerp(profile.surface.r, profile.background.r, t);
+        data[i + 1] = lerp(profile.surface.g, profile.background.g, t);
+        data[i + 2] = lerp(profile.surface.b, profile.background.b, t);
+      } else if (brightness <= 70) {
+        if (stats) stats.ink++;
         // Near-black text / ink → light text
-        const t = 1 - brightness / 80; // 0..1
-        data[i] = lerp(170, LIGHT_TEXT.r, t);
-        data[i + 1] = lerp(170, LIGHT_TEXT.g, t);
-        data[i + 2] = lerp(170, LIGHT_TEXT.b, t);
+        const t = brightness / 70;
+        data[i] = lerp(profile.text.r, 150, t);
+        data[i + 1] = lerp(profile.text.g, 150, t);
+        data[i + 2] = lerp(profile.text.b, 150, t);
       } else {
-        // Mid-grey (shadows, borders): map to corresponding dark grey
-        const mapped = Math.round(30 + (brightness / 255) * 120);
-        data[i] = mapped;
-        data[i + 1] = mapped;
-        data[i + 2] = mapped;
+        if (stats) stats.midtone++;
+        // Anti-aliased text and neutral mid-tones: ease into the dark surface
+        // instead of crushing a narrow band into an unreadable grey.
+        const t = (brightness - 70) / 110;
+        data[i] = lerp(150, profile.surface.r, t);
+        data[i + 1] = lerp(150, profile.surface.g, t);
+        data[i + 2] = lerp(150, profile.surface.b, t);
       }
     } else {
+      if (stats) stats.colourful++;
       // Colourful or photographic region:
       // Slightly reduce brightness to avoid harsh colours on dark backgrounds
       // but preserve hue so images remain recognisable.
       if (brightness > 200) {
         // Very bright colourful → tame down a bit
-        const factor = 0.75;
+        const factor = profile.id === "low-contrast-night" ? 0.62 : 0.75;
         data[i] = Math.round(r * factor);
         data[i + 1] = Math.round(g * factor);
         data[i + 2] = Math.round(b * factor);
