@@ -483,89 +483,165 @@ h4 {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Theme toggle — compact segmented radiogroup (Light / Dark / System).
+   Theme toggle — premium, quiet, minimal (Light / Dark / System).
    Reads only semantic tokens so it renders correctly in both themes.
-   No pill or giant rounded corners — modest radius, thin border,
-   restrained selected-state background, keyboard accessible.
+   Eliminates giant capsule borders and nested outline collisions.
+   Consistent padding, icon alignment, keyboard accessible.
    ═══════════════════════════════════════════════════════════════════════ */
 .theme-toggle {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   overflow: visible;
 }
 .theme-toggle-opt {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 5px 9px;
   background: transparent;
   color: var(--text-muted);
-  border: 0;
-  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 1px);
   font-family: var(--font-body);
   font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: capitalize;
   cursor: pointer;
   white-space: nowrap;
-  transition: color var(--transition-fast), background var(--transition-fast);
+  transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
 }
 .theme-toggle-opt:hover {
   color: var(--text-primary);
+  background: var(--border-subtle);
 }
 .theme-toggle-opt.is-active {
   background: var(--bg-elevated);
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--border-default);
+  border-color: var(--border-subtle);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.theme-toggle-opt:focus-visible {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 2px;
 }
 .theme-toggle-label {
   line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
 }
-/* Collapse the text label on very narrow viewports, keeping the icon. */
-@media (max-width: 420px) {
-  .theme-toggle-label {
-    display: none;
-  }
-  .theme-toggle-opt {
-    padding: 7px 5px;
-    font-size: 0.625rem;
-  }
+
+/* Landing header: compact icon toggle */
+.header-theme {
+  padding: 2px;
 }
-/* Landing header: compact icon-only toggle (space beside the CTA). */
 .header-theme .theme-toggle-label {
   display: none;
 }
 .header-theme .theme-toggle-opt {
-  padding: 7px 5px;
+  padding: 6px 8px;
 }
-/* Dashboard sidebar: vertical toggle that fits the narrow column. */
+
+/* Dashboard sidebar: three clearly separated, vertically stacked rows */
 .dash-theme {
-  margin: 18px 0 4px;
+  margin: 20px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-hairline);
+}
+.dash-theme-caption {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  padding-left: 4px;
 }
 .dash-theme .theme-toggle {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
 }
 .dash-theme .theme-toggle-opt {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
-  border-radius: var(--radius-md);
-  padding: 6px 8px;
-  font-size: 0.6875rem;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.dash-theme .theme-toggle-opt:hover {
+  background: var(--border-subtle);
+  color: var(--text-primary);
+}
+.dash-theme .theme-toggle-opt.is-active {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.dash-theme .theme-toggle-opt.is-active::after {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-purple);
+  margin-left: auto;
 }
 .dash-theme .theme-toggle-label {
   display: inline;
+}
+
+/* Mobile responsive layout */
+@media (max-width: 768px) {
+  .dash-theme {
+    margin: 0 12px 0 auto;
+    padding-top: 0;
+    border-top: none;
+  }
+  .dash-theme-caption {
+    display: none;
+  }
+  .dash-theme .theme-toggle {
+    flex-direction: row;
+    width: auto;
+    gap: 2px;
+    padding: 2px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+  }
+  .dash-theme .theme-toggle-opt {
+    width: auto;
+    padding: 5px 8px;
+    min-height: auto;
+    border: 1px solid transparent;
+  }
+  .dash-theme .theme-toggle-opt.is-active::after {
+    display: none;
+  }
+  .dash-theme .theme-toggle-label {
+    display: none;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

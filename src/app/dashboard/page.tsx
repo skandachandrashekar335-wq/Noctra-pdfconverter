@@ -58,6 +58,7 @@ function DashboardContent() {
         </nav>
 
         <div className="dash-theme">
+          <span className="dash-theme-caption">Appearance</span>
           <ThemeToggle />
         </div>
 

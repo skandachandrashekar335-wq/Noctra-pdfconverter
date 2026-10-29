@@ -106,11 +106,13 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
             className={`theme-toggle-opt${active ? " is-active" : ""}`}
             onClick={() => setPreference(pref)}
             onKeyDown={(e) => {
-              // Arrow keys move selection within the radiogroup.
-              if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+              // Arrow keys move selection within the radiogroup (both horizontal and vertical).
+              const isNext = e.key === "ArrowRight" || e.key === "ArrowDown";
+              const isPrev = e.key === "ArrowLeft" || e.key === "ArrowUp";
+              if (!isNext && !isPrev) return;
               e.preventDefault();
               const idx = THEME_PREFERENCES.indexOf(pref);
-              const delta = e.key === "ArrowRight" ? 1 : -1;
+              const delta = isNext ? 1 : -1;
               const next =
                 THEME_PREFERENCES[
                   (idx + delta + THEME_PREFERENCES.length) %

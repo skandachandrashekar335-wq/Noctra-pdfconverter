@@ -65,10 +65,10 @@ const FEATURES = [
     cta: "Convert a document",
   },
   {
-    geo: "ring",
-    title: "Image-aware transformation",
-    body: "Photographs, diagrams, charts, and screenshots are preserved and only slightly dimmed, so they stay visually useful.",
-    cta: "See the showcase",
+    geo: "sweep",
+    title: "The Dark Sweep preview",
+    body: "Live visual proof for every page. Watch real render thumbnails sweep from light to dark in real time before downloading.",
+    cta: "See the preview",
     href: "#showcase",
   },
   {
@@ -89,6 +89,20 @@ const FEATURES = [
     title: "Hyperlinks preserved",
     body: "External links, mailto links, and internal page jumps are rebuilt as real PDF link annotations — not flattened into pixels.",
     cta: "Convert a PDF",
+  },
+  {
+    geo: "diamond",
+    title: "Image-aware preservation",
+    body: "Photographs, diagrams, charts, and screenshots are preserved and only slightly dimmed, so they stay visually useful.",
+    cta: "See the showcase",
+    href: "#showcase",
+  },
+  {
+    geo: "palette",
+    title: "Four tailored reading palettes",
+    body: "Choose OLED Black for lowest glare, Charcoal Dark for soft contrast, Warm Sepia for long study sessions, or Low-Contrast Night.",
+    cta: "Compare palettes",
+    href: "#themes",
   },
 ];
 
@@ -2094,13 +2108,66 @@ export default function LandingPage() {
           background: var(--text-primary);
           transform: translateX(-50%);
         }
+        .geo--sweep::before {
+          left: 0;
+          top: 4px;
+          width: 21px;
+          height: 36px;
+          border: 1px solid var(--text-primary);
+          border-right: none;
+        }
+        .geo--sweep::after {
+          right: 0;
+          top: 4px;
+          width: 22px;
+          height: 36px;
+          background: var(--text-primary);
+        }
+        .geo--sweep .geo-mark {
+          left: 21px;
+          top: 4px;
+          width: 2px;
+          height: 36px;
+          background: var(--accent-purple);
+        }
+        .geo--diamond::before {
+          inset: 8px;
+          border: 1px solid var(--text-primary);
+          transform: rotate(45deg);
+        }
+        .geo--diamond .geo-mark {
+          inset: 16px;
+          background: var(--text-primary);
+          transform: rotate(45deg);
+        }
+        .geo--palette::before {
+          left: 0;
+          top: 2px;
+          width: 19px;
+          height: 19px;
+          background: var(--text-primary);
+        }
+        .geo--palette::after {
+          right: 0;
+          top: 2px;
+          width: 19px;
+          height: 19px;
+          border: 1px solid var(--text-primary);
+        }
+        .geo--palette .geo-mark {
+          left: 0;
+          bottom: 2px;
+          width: 19px;
+          height: 19px;
+          background: var(--echo-faint-28);
+        }
 
         .feature-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(1.25rem, 1.8vw, 1.5rem);
-          line-height: 1;
-          letter-spacing: -0.04em;
+          font-size: clamp(1.2rem, 1.6vw, 1.45rem);
+          line-height: 1.15;
+          letter-spacing: -0.035em;
           color: var(--text-primary);
           margin: 0;
         }
@@ -2114,20 +2181,33 @@ export default function LandingPage() {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          margin-top: 6px;
+          margin-top: 8px;
+          padding: 6px 0;
           font-size: 0.6875rem;
           font-weight: 700;
           letter-spacing: 0.16em;
           text-transform: uppercase;
           color: var(--text-primary);
           text-decoration: none;
+          transition: color var(--transition-fast);
+        }
+        .feature-link:focus-visible {
+          outline: 2px solid var(--accent-purple);
+          outline-offset: 4px;
+          border-radius: 2px;
         }
         .feature-arrow {
           display: inline-block;
           transition: transform var(--transition-base);
+          font-size: 0.8125rem;
+          color: var(--accent-purple);
         }
         .feature-card:hover .feature-arrow {
-          transform: translate(4px, -4px);
+          transform: translate(3px, -3px);
+        }
+        .feature-card:hover,
+        .feature-card:focus-within {
+          background: var(--landing-faint);
         }
         .feature-link:hover .feature-link-label {
           text-decoration: underline;
@@ -2138,10 +2218,26 @@ export default function LandingPage() {
           .feature-grid {
             grid-template-columns: repeat(2, 1fr);
           }
+          /* Tablet balanced grid: odd final card spans both columns intentionally */
+          .feature-card:last-child:nth-child(odd) {
+            grid-column: span 2;
+          }
         }
         @media (min-width: 1040px) {
           .feature-grid {
             grid-template-columns: repeat(3, 1fr);
+          }
+          /* Reset tablet 2-col span on 3-col desktop layout */
+          .feature-card:last-child:nth-child(odd) {
+            grid-column: auto;
+          }
+          /* If incomplete row on 3-col: lone card spans full width */
+          .feature-card:last-child:nth-child(3n + 1) {
+            grid-column: 1 / -1;
+          }
+          /* If two cards in final row: second card balances across remaining span */
+          .feature-card:last-child:nth-child(3n + 2) {
+            grid-column: span 2;
           }
         }
 
