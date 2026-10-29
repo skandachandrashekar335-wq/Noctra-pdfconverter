@@ -6,7 +6,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { getLandingCtaMode } from "@/lib/landing-cta";
+import {
+  CONVERSION_PROFILES,
+  type ConversionProfile,
+} from "@/lib/conversion-profiles";
 
 /* ──────────────────────────────────────────────────────────────────────────
    Shared data — every claim below maps to code that exists in this repo
@@ -17,7 +22,9 @@ import { getLandingCtaMode } from "@/lib/landing-cta";
 const NAV_LINKS = [
   { href: "#philosophy", label: "Philosophy" },
   { href: "#showcase", label: "Showcase" },
+  { href: "#themes", label: "Themes" },
   { href: "#features", label: "Features" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 const PRINCIPLES = [
@@ -88,11 +95,37 @@ const FEATURES = [
 const FOOTER_NAV = [
   { href: "#philosophy", label: "Philosophy" },
   { href: "#showcase", label: "Showcase" },
+  { href: "#themes", label: "Themes" },
   { href: "#features", label: "Features" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 const FOOTER_PRODUCT = [
   { href: "#features", label: "Supported formats" },
+];
+
+/* Concise FAQ — every answer reflects what the code actually does. */
+const FAQS = [
+  {
+    q: "Do my documents get uploaded to a server?",
+    a: "No. Conversion runs entirely in your browser with PDF.js and JSZip. Your file never leaves your device — there is no upload step and no conversion server.",
+  },
+  {
+    q: "Which formats are supported?",
+    a: "PDF, DOCX and PPTX in. PDF converts to a dark-mode PDF with a live text layer; DOCX and PPTX stay fully editable after the dark theme is applied.",
+  },
+  {
+    q: "Are images and diagrams affected?",
+    a: "Photographs, charts and screenshots are preserved and only slightly dimmed — they are never blanket-inverted, so they stay visually useful.",
+  },
+  {
+    q: "Can I choose the dark theme?",
+    a: "Yes. Pick from OLED Black, Charcoal Dark, Warm Sepia or Low-Contrast Night before converting. The theme you select is the palette applied to your output.",
+  },
+  {
+    q: "Is there a file-size limit?",
+    a: "Files up to 50 MB are supported. Larger documents may be slow to process on low-power devices because everything runs locally.",
+  },
 ];
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -106,6 +139,11 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copyrightYear, setCopyrightYear] = useState("");
   const [authRedirectPending, setAuthRedirectPending] = useState(false);
+  // Interactive theme preview — defaults to the same profile the converter
+  // uses, so what's previewed is exactly what a conversion would apply.
+  const [previewProfile, setPreviewProfile] = useState<ConversionProfile>(
+    CONVERSION_PROFILES[0]
+  );
 
   // The button may unmount as soon as AuthProvider observes the new user. Keep
   // the redirect state in this public page so successful sign-in cannot lose
@@ -330,6 +368,7 @@ export default function LandingPage() {
           </nav>
 
           <div className="header-actions">
+            <ThemeToggle className="header-theme" />
             {ctaMode === "resolving-session" ? (
               <span
                 className="pill-cta pill-cta--pending"
@@ -706,6 +745,132 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ── Interactive theme preview ───────────────────────────────── */}
+        <section
+          className="themes"
+          id="themes"
+          aria-labelledby="themes-title"
+        >
+          <div className="shell">
+            <div className="section-head">
+              <div>
+                <p className="section-label" data-reveal>
+                  Your theme
+                </p>
+                <h2 className="section-title" id="themes-title" data-reveal>
+                  Pick your
+                  <br />
+                  darkness
+                </h2>
+              </div>
+              <p className="section-note" data-reveal>
+                These are the exact palettes the converter applies — preview one
+                here, then use it on your own document.
+              </p>
+            </div>
+
+            <div className="theme-layout">
+              {/* Profile chooser — real ConversionProfile data */}
+              <div
+                className="theme-list"
+                role="group"
+                aria-label="Choose a dark theme to preview"
+              >
+                {CONVERSION_PROFILES.map((p) => {
+                  const active = p.id === previewProfile.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`theme-item ${active ? "is-active" : ""}`}
+                      aria-pressed={active}
+                      onClick={() => setPreviewProfile(p)}
+                    >
+                      <span
+                        className="theme-swatch"
+                        aria-hidden="true"
+                        style={{
+                          background: rgbToCss(p.background),
+                          borderColor: rgbToCss(p.surface),
+                        }}
+                      >
+                        <span
+                          className="theme-swatch-accent"
+                          style={{ background: rgbToCss(p.accent) }}
+                        />
+                      </span>
+                      <span className="theme-item-text">
+                        <span className="theme-item-label">{p.label}</span>
+                        <span className="theme-item-desc">{p.description}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Live preview — rendered with the selected profile's colors */}
+              <div
+                className="theme-preview"
+                aria-live="polite"
+                aria-label={`${previewProfile.label} preview`}
+              >
+                <div
+                  className="tp-doc"
+                  style={{
+                    background: rgbToCss(previewProfile.background),
+                    borderColor: rgbToCss(previewProfile.surface),
+                  }}
+                >
+                  <div
+                    className="tp-tag"
+                    style={{ color: rgbToCss(previewProfile.text), opacity: 0.6 }}
+                  >
+                    {previewProfile.label}
+                  </div>
+                  <div
+                    className="tp-line tp-line--title"
+                    style={{ background: rgbToCss(previewProfile.text) }}
+                  />
+                  <div
+                    className="tp-line"
+                    style={{
+                      background: rgbToCss(previewProfile.text),
+                      opacity: 0.55,
+                    }}
+                  />
+                  <div
+                    className="tp-line tp-line--short"
+                    style={{
+                      background: rgbToCss(previewProfile.text),
+                      opacity: 0.55,
+                    }}
+                  />
+                  <div className="tp-chart" aria-hidden="true">
+                    {[38, 72, 54, 88].map((h, i) => (
+                      <span
+                        key={i}
+                        style={{
+                          height: `${h}%`,
+                          background: rgbToCss(
+                            i % 2 === 0 ? previewProfile.accent : previewProfile.surface
+                          ),
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div
+                    className="tp-line"
+                    style={{
+                      background: rgbToCss(previewProfile.text),
+                      opacity: 0.55,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ── Features ─────────────────────────────────────────────────── */}
         <section
           className="features"
@@ -756,6 +921,45 @@ export default function LandingPage() {
                 </li>
               ))}
             </ul>
+          </div>
+        </section>
+
+        {/* ── FAQ + privacy ────────────────────────────────────────────── */}
+        <section className="faq" id="faq" aria-labelledby="faq-title">
+          <div className="shell">
+            <div className="faq-grid">
+              <div className="faq-intro">
+                <p className="section-label" data-reveal>
+                  Questions
+                </p>
+                <h2 className="section-title" id="faq-title" data-reveal>
+                  Good to
+                  <br />
+                  know
+                </h2>
+                <div className="privacy-note" data-reveal>
+                  <h3 className="privacy-title">Privacy, in plain terms</h3>
+                  <p className="privacy-body">
+                    Conversion happens on your device. Your document is read by
+                    your browser, transformed locally, and handed back to you as
+                    a download. It is never sent to a conversion server, and we
+                    never see your file.
+                  </p>
+                </div>
+              </div>
+
+              <div className="faq-list">
+                {FAQS.map((f) => (
+                  <details key={f.q} className="faq-item" data-reveal>
+                    <summary className="faq-q">
+                      {f.q}
+                      <span className="faq-caret" aria-hidden="true" />
+                    </summary>
+                    <p className="faq-a">{f.a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -933,7 +1137,7 @@ export default function LandingPage() {
           position: sticky;
           top: 0;
           z-index: 60;
-          background: rgba(242, 242, 242, 0.74);
+          background: var(--surface-scrim);
           border-bottom: 1px solid var(--border-hairline);
         }
         /* The minifier collapses backdrop-filter into its -webkit- alias,
@@ -960,7 +1164,7 @@ export default function LandingPage() {
           font-weight: 700;
           font-size: 1.25rem;
           letter-spacing: -0.05em;
-          color: #111111;
+          color: var(--text-primary);
           text-decoration: none;
         }
         .wordmark-icon {
@@ -993,17 +1197,17 @@ export default function LandingPage() {
           gap: 12px;
         }
 
-        /* Pill CTA — 1px dark border, inverts on hover */
+        /* Pill CTA — brand violet fill that inverts to an outline on hover */
         .pill-cta {
           display: inline-flex;
           align-items: center;
           justify-content: center;
           height: 44px;
           padding-inline: 22px;
-          border: 1px solid #111111;
+          border: 1px solid var(--border-strong);
           border-radius: var(--radius-pill);
           background: transparent;
-          color: #111111;
+          color: var(--text-primary);
           font-family: var(--font-body);
           font-size: 0.75rem;
           font-weight: 700;
@@ -1013,27 +1217,31 @@ export default function LandingPage() {
           white-space: nowrap;
           cursor: pointer;
           transition: background var(--transition-fast),
-            color var(--transition-fast);
+            color var(--transition-fast), border-color var(--transition-fast);
         }
         .pill-cta:hover {
-          background: #111111;
-          color: #f2f2f2;
+          background: var(--text-primary);
+          border-color: var(--text-primary);
+          color: var(--bg-base);
         }
         .pill-cta--solid {
-          background: #111111;
-          color: #f2f2f2;
+          background: var(--accent-purple);
+          border-color: var(--accent-purple);
+          color: #ffffff;
         }
         .pill-cta--solid:hover {
-          background: transparent;
-          color: #111111;
+          background: var(--accent-hover);
+          border-color: var(--accent-hover);
+          color: #ffffff;
         }
         .pill-cta--invert {
-          border-color: #f2f2f2;
-          color: #f2f2f2;
+          background: var(--text-primary);
+          border-color: var(--text-primary);
+          color: var(--bg-base);
         }
         .pill-cta--invert:hover {
-          background: #f2f2f2;
-          color: #111111;
+          background: transparent;
+          color: var(--text-primary);
         }
         .pill-cta--pending {
           cursor: wait;
@@ -1047,7 +1255,7 @@ export default function LandingPage() {
           width: 44px;
           height: 44px;
           background: transparent;
-          border: 1px solid #111111;
+          border: 1px solid var(--border-strong);
           border-radius: var(--radius-pill);
           cursor: pointer;
         }
@@ -1060,11 +1268,11 @@ export default function LandingPage() {
         .menu-toggle-bars span {
           display: block;
           height: 1px;
-          background: #111111;
+          background: var(--text-primary);
         }
         .mobile-nav {
           border-top: 1px solid var(--border-hairline);
-          background: #f2f2f2;
+          background: var(--surface-scrim-strong);
           padding: 8px clamp(20px, 5vw, 48px) 20px;
         }
         .mobile-nav nav {
@@ -1123,7 +1331,7 @@ export default function LandingPage() {
           line-height: 0.9;
           letter-spacing: -0.05em;
           text-transform: uppercase;
-          color: #111111;
+          color: var(--text-primary);
           margin: 0;
         }
         /* Typographic Echo Stack — four decorative repetitions, offset ~0.04em
@@ -1154,22 +1362,22 @@ export default function LandingPage() {
         .echo--1 {
           top: 0.04em;
           left: 0.04em;
-          color: #bfbfbf;
+          color: var(--echo-1);
         }
         .echo--2 {
           top: 0.08em;
           left: 0.08em;
-          color: #c9c9c9;
+          color: var(--echo-2);
         }
         .echo--3 {
           top: 0.12em;
           left: 0.12em;
-          color: #d1d1d1;
+          color: var(--echo-3);
         }
         .echo--4 {
           top: 0.16em;
           left: 0.16em;
-          color: #d9d9d9;
+          color: var(--echo-4);
         }
         .hero-sub {
           margin-top: clamp(32px, 5vw, 56px);
@@ -1184,7 +1392,7 @@ export default function LandingPage() {
           font-weight: 700;
           font-size: 1.35em;
           letter-spacing: -0.05em;
-          color: #111111;
+          color: var(--text-primary);
         }
         .hero-actions {
           margin-top: clamp(32px, 5vw, 48px);
@@ -1203,7 +1411,7 @@ export default function LandingPage() {
           margin-top: -4px;
           font-size: 0.8125rem;
           line-height: 1.5;
-          color: #a93636;
+          color: var(--accent-bad);
         }
 
         .text-cta {
@@ -1233,11 +1441,11 @@ export default function LandingPage() {
           align-self: flex-end;
         }
         .text-cta--invert {
-          color: #f2f2f2;
-          border-bottom-color: rgba(242, 242, 242, 0.35);
+          color: var(--text-primary);
+          border-bottom-color: var(--ink-50);
         }
         .text-cta--invert:hover {
-          border-bottom-color: #f2f2f2;
+          border-bottom-color: var(--text-primary);
         }
 
         /* ══ Section furniture ═════════════════════════════════════════ */
@@ -1250,7 +1458,7 @@ export default function LandingPage() {
           margin-bottom: 18px;
         }
         .section-label--light {
-          color: rgba(242, 242, 242, 0.62);
+          color: var(--ink-62);
         }
         .section-title {
           font-family: var(--font-display);
@@ -1259,7 +1467,7 @@ export default function LandingPage() {
           line-height: 0.9;
           letter-spacing: -0.05em;
           text-transform: uppercase;
-          color: #111111;
+          color: var(--text-primary);
           margin: 0;
         }
         .section-head {
@@ -1308,7 +1516,7 @@ export default function LandingPage() {
           line-height: 0.9;
           letter-spacing: -0.05em;
           text-transform: uppercase;
-          color: #111111;
+          color: var(--text-primary);
           margin: 0;
         }
         .philosophy-title .serif-em {
@@ -1355,7 +1563,7 @@ export default function LandingPage() {
           line-height: 0.95;
           letter-spacing: -0.05em;
           text-transform: uppercase;
-          color: #111111;
+          color: var(--text-primary);
           margin: 0 0 12px;
         }
         .principle-body {
@@ -1582,8 +1790,8 @@ export default function LandingPage() {
           width: 34%;
           aspect-ratio: 1;
           border-radius: 50%;
-          background: #111114;
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          background: var(--surface-island);
+          border: 1px solid var(--landing-border-stronger);
         }
         .diagram-node {
           position: absolute;
@@ -1620,7 +1828,7 @@ export default function LandingPage() {
         }
         .diagram-plot span {
           flex: 1;
-          background: rgba(124, 109, 255, 0.55);
+          background: var(--violet-55);
           border-radius: 2px 2px 0 0;
         }
         .diagram-plot span:nth-child(2n) {
@@ -1687,7 +1895,7 @@ export default function LandingPage() {
           font-size: 0.9375rem;
         }
         .textlayer-line mark {
-          background: rgba(124, 109, 255, 0.3);
+          background: var(--violet-30);
           color: inherit;
           padding: 1px 3px;
         }
@@ -1707,7 +1915,7 @@ export default function LandingPage() {
           bottom: clamp(16px, 2.5vw, 26px);
           width: clamp(48px, 8vw, 84px);
           height: 10px;
-          background: rgba(124, 109, 255, 0.35);
+          background: var(--violet-35);
           border-radius: 2px;
         }
 
@@ -1768,7 +1976,7 @@ export default function LandingPage() {
           transition: background var(--transition-base);
         }
         .feature-card:hover {
-          background: rgba(17, 17, 17, 0.04);
+          background: var(--landing-faint);
         }
 
         /* small geometric marks — CSS only, no icon set */
@@ -1792,41 +2000,41 @@ export default function LandingPage() {
         }
         .geo--square::before {
           inset: 0;
-          border: 1px solid #111111;
+          border: 1px solid var(--text-primary);
         }
         .geo--square .geo-mark {
           inset: 12px;
-          background: #111111;
+          background: var(--text-primary);
         }
         .geo--stack::before {
           left: 0;
           right: 0;
           top: 6px;
           height: 10px;
-          border: 1px solid #111111;
+          border: 1px solid var(--text-primary);
         }
         .geo--stack::after {
           left: 0;
           right: 0;
           top: 20px;
           height: 10px;
-          background: rgba(17, 17, 17, 0.28);
+          background: var(--echo-faint-28);
         }
         .geo--stack .geo-mark {
           left: 0;
           right: 0;
           top: 34px;
           height: 10px;
-          background: #111111;
+          background: var(--text-primary);
         }
         .geo--ring::before {
           inset: 0;
-          border: 1px solid #111111;
+          border: 1px solid var(--text-primary);
           border-radius: 50%;
         }
         .geo--ring .geo-mark {
           inset: 14px;
-          background: #111111;
+          background: var(--text-primary);
           border-radius: 50%;
         }
         .geo--grid::before {
@@ -1834,30 +2042,30 @@ export default function LandingPage() {
           top: 0;
           width: 20px;
           height: 20px;
-          background: #111111;
+          background: var(--text-primary);
         }
         .geo--grid::after {
           right: 0;
           top: 0;
           width: 20px;
           height: 20px;
-          border: 1px solid #111111;
+          border: 1px solid var(--text-primary);
         }
         .geo--grid .geo-mark {
           left: 0;
           bottom: 0;
           width: 20px;
           height: 20px;
-          border: 1px solid #111111;
+          border: 1px solid var(--text-primary);
         }
         .geo--lines::before {
           left: 0;
           right: 0;
           top: 8px;
           height: 1px;
-          background: #111111;
-          box-shadow: 0 9px 0 #111111, 0 18px 0 rgba(17, 17, 17, 0.4),
-            0 27px 0 rgba(17, 17, 17, 0.4);
+          background: var(--text-primary);
+          box-shadow: 0 9px 0 var(--text-primary), 0 18px 0 var(--echo-faint-40),
+            0 27px 0 var(--echo-faint-40);
         }
         .geo--lines .geo-mark {
           display: none;
@@ -1867,7 +2075,7 @@ export default function LandingPage() {
           top: 12px;
           width: 26px;
           height: 12px;
-          border: 1px solid #111111;
+          border: 1px solid var(--text-primary);
           border-radius: 999px;
         }
         .geo--link::after {
@@ -1875,7 +2083,7 @@ export default function LandingPage() {
           top: 12px;
           width: 26px;
           height: 12px;
-          border: 1px solid #111111;
+          border: 1px solid var(--text-primary);
           border-radius: 999px;
         }
         .geo--link .geo-mark {
@@ -1883,7 +2091,7 @@ export default function LandingPage() {
           top: 17px;
           width: 8px;
           height: 1px;
-          background: #111111;
+          background: var(--text-primary);
           transform: translateX(-50%);
         }
 
@@ -1939,9 +2147,9 @@ export default function LandingPage() {
 
         /* ══ Closing CTA ═══════════════════════════════════════════════ */
         .closing {
-          background: #111114;
-          color: #f2f2f2;
-          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          background: var(--surface-island);
+          color: var(--text-primary);
+          border-top: 1px solid var(--landing-border);
           padding-block: clamp(64px, 9vw, 120px);
         }
         .closing-inner {
@@ -1957,7 +2165,7 @@ export default function LandingPage() {
           line-height: 0.9;
           letter-spacing: -0.05em;
           text-transform: uppercase;
-          color: #f2f2f2;
+          color: var(--text-primary);
           margin: 0;
         }
         .closing-actions {
@@ -1974,9 +2182,9 @@ export default function LandingPage() {
 
         /* ══ Footer ════════════════════════════════════════════════════ */
         .site-footer {
-          background: #0b0b0e;
-          color: #f2f2f2;
-          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          background: var(--surface-island-deep);
+          color: var(--text-primary);
+          border-top: 1px solid var(--landing-border);
           padding-top: clamp(48px, 7vw, 84px);
           padding-bottom: clamp(28px, 4vw, 44px);
         }
@@ -1992,13 +2200,13 @@ export default function LandingPage() {
           font-size: clamp(2rem, 5vw, 3rem);
           letter-spacing: -0.05em;
           line-height: 0.9;
-          color: #f2f2f2;
+          color: var(--text-primary);
           margin-bottom: 18px;
         }
         .footer-desc {
           font-size: 0.9375rem;
           line-height: 1.65;
-          color: rgba(242, 242, 242, 0.62);
+          color: var(--ink-62);
           max-width: 42ch;
         }
         .footer-heading {
@@ -2007,7 +2215,7 @@ export default function LandingPage() {
           font-weight: 700;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: rgba(242, 242, 242, 0.5);
+          color: var(--ink-50);
           margin: 0 0 18px;
         }
         .footer-col ul {
@@ -2020,37 +2228,246 @@ export default function LandingPage() {
         }
         .footer-col a {
           font-size: 0.9375rem;
-          color: rgba(242, 242, 242, 0.82);
+          color: var(--ink-82);
           text-decoration: none;
           transition: color var(--transition-fast);
         }
         .footer-col a:hover {
-          color: #f2f2f2;
+          color: var(--text-primary);
           text-decoration: underline;
           text-underline-offset: 4px;
         }
         .footer-static {
           font-size: 0.9375rem;
-          color: rgba(242, 242, 242, 0.62);
+          color: var(--ink-62);
         }
         .footer-auth-pending {
           font-size: 0.9375rem;
-          color: rgba(242, 242, 242, 0.5);
+          color: var(--ink-50);
         }
         .footer-base {
           margin-top: clamp(40px, 6vw, 68px);
           padding-top: 24px;
-          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          border-top: 1px solid var(--landing-border);
         }
         .footer-base p {
           font-size: 0.8125rem;
-          color: rgba(242, 242, 242, 0.5);
+          color: var(--ink-50);
         }
 
         @media (min-width: 760px) {
           .footer-grid {
             grid-template-columns: 1.6fr 1fr 1fr 1fr;
             gap: clamp(28px, 4vw, 56px);
+          }
+        }
+
+        /* ══ Theme preview ═════════════════════════════════════════════ */
+        .themes {
+          padding-block: clamp(64px, 9vw, 128px);
+          background: var(--bg-surface);
+          border-top: 1px solid var(--border-hairline);
+          border-bottom: 1px solid var(--border-hairline);
+        }
+        .theme-layout {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: clamp(28px, 4vw, 48px);
+          align-items: start;
+        }
+        .theme-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .theme-item {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          width: 100%;
+          text-align: left;
+          padding: 14px 16px;
+          background: transparent;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: border-color var(--transition-fast),
+            background var(--transition-fast);
+        }
+        .theme-item:hover {
+          border-color: var(--border-default);
+          background: var(--bg-card-hover);
+        }
+        .theme-item.is-active {
+          border-color: var(--accent-purple);
+          background: var(--accent-purple-dim);
+        }
+        .theme-swatch {
+          position: relative;
+          flex-shrink: 0;
+          width: 44px;
+          height: 44px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          display: grid;
+          place-items: center;
+        }
+        .theme-swatch-accent {
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+        }
+        .theme-item-text {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          min-width: 0;
+        }
+        .theme-item-label {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 1rem;
+          letter-spacing: -0.03em;
+          color: var(--text-primary);
+        }
+        .theme-item-desc {
+          font-size: 0.8125rem;
+          line-height: 1.5;
+          color: var(--text-secondary);
+        }
+        .theme-preview {
+          position: sticky;
+          top: calc(var(--nav-h) + 24px);
+        }
+        .tp-doc {
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-lg);
+          padding: clamp(22px, 3vw, 32px);
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          min-height: 320px;
+          transition: background var(--transition-base),
+            border-color var(--transition-base);
+        }
+        .tp-tag {
+          font-family: var(--font-body);
+          font-size: 0.625rem;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+        }
+        .tp-line {
+          height: 8px;
+          border-radius: 3px;
+          width: 100%;
+        }
+        .tp-line--title {
+          height: 14px;
+          width: 58%;
+        }
+        .tp-line--short {
+          width: 42%;
+        }
+        .tp-chart {
+          display: flex;
+          align-items: flex-end;
+          gap: 8px;
+          height: clamp(70px, 12vw, 110px);
+          margin-block: 6px;
+        }
+        .tp-chart span {
+          flex: 1;
+          border-radius: 3px 3px 0 0;
+        }
+        @media (min-width: 860px) {
+          .theme-layout {
+            grid-template-columns: 1fr 0.9fr;
+          }
+        }
+
+        /* ══ FAQ + privacy ════════════════════════════════════════════ */
+        .faq {
+          padding-block: clamp(64px, 9vw, 128px);
+        }
+        .faq-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: clamp(32px, 5vw, 64px);
+        }
+        .faq-intro .section-title {
+          margin-bottom: clamp(28px, 4vw, 40px);
+        }
+        .privacy-note {
+          padding: 20px 22px;
+          border: 1px solid var(--border-subtle);
+          border-left: 2px solid var(--accent-purple);
+          border-radius: var(--radius-md);
+          background: var(--bg-surface);
+        }
+        .privacy-title {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 1.0625rem;
+          letter-spacing: -0.03em;
+          color: var(--text-primary);
+          margin: 0 0 8px;
+        }
+        .privacy-body {
+          font-size: 0.9375rem;
+          line-height: 1.65;
+          color: var(--text-secondary);
+          margin: 0;
+        }
+        .faq-list {
+          display: flex;
+          flex-direction: column;
+        }
+        .faq-item {
+          border-bottom: 1px solid var(--border-hairline);
+        }
+        .faq-item:first-child {
+          border-top: 1px solid var(--border-hairline);
+        }
+        .faq-q {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 22px 0;
+          cursor: pointer;
+          list-style: none;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(1.0625rem, 1.6vw, 1.25rem);
+          letter-spacing: -0.03em;
+          color: var(--text-primary);
+        }
+        .faq-q::-webkit-details-marker {
+          display: none;
+        }
+        .faq-caret {
+          flex-shrink: 0;
+          width: 12px;
+          height: 12px;
+          border-right: 1.5px solid var(--text-secondary);
+          border-bottom: 1.5px solid var(--text-secondary);
+          transform: rotate(45deg);
+          transition: transform var(--transition-fast);
+        }
+        .faq-item[open] .faq-caret {
+          transform: rotate(-135deg);
+        }
+        .faq-a {
+          margin: 0 0 22px;
+          max-width: 60ch;
+          font-size: 0.9375rem;
+          line-height: 1.7;
+          color: var(--text-secondary);
+        }
+        @media (min-width: 860px) {
+          .faq-grid {
+            grid-template-columns: 0.85fr 1.15fr;
           }
         }
 
@@ -2073,4 +2490,9 @@ export default function LandingPage() {
       `}</style>
     </div>
   );
+}
+
+/** Format a converter RGB triple as an inline CSS color. */
+function rgbToCss({ r, g, b }: { r: number; g: number; b: number }): string {
+  return `rgb(${r} ${g} ${b})`;
 }

@@ -59,6 +59,34 @@
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-lift: 0 18px 40px -24px rgba(0, 0, 0, 0.7);
 
+  /* ── Landing surfaces (dark / OLED default) ───────────────────────── */
+  --surface-scrim: rgba(8, 8, 11, 0.72); /* sticky header glass */
+  --surface-scrim-strong: rgba(8, 8, 11, 0.96); /* mobile menu glass */
+  --surface-island: #111114; /* bottom CTA island */
+  --surface-island-deep: #0b0b0e; /* footer floor */
+  --landing-border: rgba(255, 255, 255, 0.12);
+  --landing-border-strong: rgba(255, 255, 255, 0.14);
+  --landing-border-stronger: rgba(255, 255, 255, 0.2);
+  --landing-faint: rgba(255, 255, 255, 0.03);
+
+  /* ── Landing ink ramps (alpha text on dark) ───────────────────────── */
+  --ink-62: rgba(242, 242, 242, 0.62);
+  --ink-55: rgba(242, 242, 242, 0.55);
+  --ink-50: rgba(242, 242, 242, 0.5);
+  --ink-82: rgba(242, 242, 242, 0.82);
+  --echo-1: #14141d; /* ghost headline ramp */
+  --echo-2: #191926;
+  --echo-3: #1e1e2e;
+  --echo-4: #24243a;
+  --echo-faint-28: rgba(244, 244, 247, 0.28);
+  --echo-faint-40: rgba(244, 244, 247, 0.4);
+
+  /* ── Landing accent extras ────────────────────────────────────────── */
+  --accent-hover: #8b7cff;
+  --violet-30: rgba(124, 109, 255, 0.3);
+  --violet-35: rgba(124, 109, 255, 0.35);
+  --violet-55: rgba(124, 109, 255, 0.55);
+
   /* ── Radius ───────────────────────────────────────────────────────── */
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -79,39 +107,147 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Editorial landing scope — off-white Swiss palette
+   Light theme — warm paper / soft ivory.
+   Same semantic contract as `:root`, re-pointed to a comfortable reading
+   palette: ivory canvases, warm-charcoal ink, hairline warm borders and a
+   deeper violet accent so links/focus stay AA-legible on light paper.
+   Dark remains the default (OLED-first identity) — this only applies when
+   <html data-theme="light">.
    ═══════════════════════════════════════════════════════════════════════ */
-.landing {
-  --bg-base: #f2f2f2;
-  --bg-surface: #ebebeb;
-  --bg-elevated: #e4e4e4;
-  --bg-card: #f2f2f2;
-  --bg-card-hover: #e9e9e9;
-  --bg-inset: #e6e6e6;
+:root[data-theme="light"] {
+  /* ── Surfaces (warm paper) ────────────────────────────────────────── */
+  --bg-base: #faf7f0;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f2ede2;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f7f2e8;
+  --bg-inset: #efe9dc;
 
-  --border-subtle: rgba(17, 17, 17, 0.1);
-  --border-default: rgba(17, 17, 17, 0.18);
-  --border-strong: rgba(17, 17, 17, 0.55);
-  --border-hairline: rgba(17, 17, 17, 0.1);
+  /* ── Borders (warm hairlines) ─────────────────────────────────────── */
+  --border-subtle: rgba(60, 48, 24, 0.09);
+  --border-default: rgba(60, 48, 24, 0.16);
+  --border-strong: rgba(60, 48, 24, 0.28);
+  --border-hairline: rgba(60, 48, 24, 0.12);
 
-  --text-primary: #111111;
-  --text-secondary: #5a5a5a; /* body copy — AA on #F2F2F2 */
-  --text-muted: #6b6a6a; /* meta copy — AA on #F2F2F2 */
+  /* ── Text (warm charcoal ink) ─────────────────────────────────────── */
+  --text-primary: #1d1a13;
+  --text-secondary: #4b463a; /* body copy — AA on #FAF7F0 */
+  --text-muted: #6d675a; /* meta copy — AA on #FAF7F0 */
+  /* decorative grays (echo layers, numerals) — warm mid-tones on paper */
+  --gray-100: #322d22;
+  --gray-200: #4a4436;
+  --gray-300: #625b4a;
+  --gray-400: #7a7261;
+  --gray-500: #928976;
+  --gray-600: #b0a793;
 
-  --accent-purple: #5b4de0; /* purple darkened for AA on light */
-  --accent-purple-dim: rgba(91, 77, 224, 0.12);
-  --accent-blue: #1a5fc7; /* link blue darkened for AA on #e6e6e6 */
-  --accent-glow: rgba(17, 17, 17, 0.12);
+  /* ── Brand (deepened for contrast on light) ───────────────────────── */
+  --accent: #5b4ddb;
+  --accent-purple: #5b4ddb;
+  --accent-purple-dim: rgba(91, 77, 219, 0.1);
+  --accent-blue: #3b6fd6;
+  --accent-ok: #12885e;
+  --accent-warn: #b06f0a;
+  --accent-bad: #d23b3b;
+  --accent-glow: rgba(91, 77, 219, 0.16);
+
+  /* ── Gradients ────────────────────────────────────────────────────── */
+  --gradient-accent: linear-gradient(135deg, #5b4ddb 0%, #3b6fd6 100%);
+
+  /* ── Shadows (soft, warm) ─────────────────────────────────────────── */
+  --shadow-card: 0 1px 2px rgba(80, 60, 20, 0.08);
+  --shadow-lift: 0 18px 40px -24px rgba(60, 45, 15, 0.3);
+
+  /* ── Landing surfaces (warm paper) ────────────────────────────────── */
+  --surface-scrim: rgba(245, 239, 226, 0.82);
+  --surface-scrim-strong: rgba(245, 239, 226, 0.96);
+  --surface-island: #f2ede2;
+  --surface-island-deep: #e9e0cd;
+  --landing-border: rgba(60, 48, 24, 0.14);
+  --landing-border-strong: rgba(60, 48, 24, 0.18);
+  --landing-border-stronger: rgba(60, 48, 24, 0.26);
+  --landing-faint: rgba(60, 48, 24, 0.04);
+
+  /* ── Landing ink ramps (warm charcoal alpha on paper) ─────────────── */
+  --ink-62: rgba(29, 26, 19, 0.62);
+  --ink-55: rgba(29, 26, 19, 0.55);
+  --ink-50: rgba(29, 26, 19, 0.5);
+  --ink-82: rgba(29, 26, 19, 0.82);
+  --echo-1: #e7ddc8; /* ghost headline ramp — warm grays */
+  --echo-2: #ded3ba;
+  --echo-3: #d5c9ad;
+  --echo-4: #ccbfa1;
+  --echo-faint-28: rgba(60, 48, 24, 0.16);
+  --echo-faint-40: rgba(60, 48, 24, 0.22);
+
+  /* ── Landing accent extras (deepened for paper) ───────────────────── */
+  --accent-hover: #4a3cc9;
+  --violet-30: rgba(91, 77, 219, 0.22);
+  --violet-35: rgba(91, 77, 219, 0.28);
+  --violet-55: rgba(91, 77, 219, 0.42);
 }
 
-/* Page canvas follows the scope so the editorial page never flashes dark. */
-body:has(.landing) {
-  background-color: #f2f2f2;
+/* ═══════════════════════════════════════════════════════════════════════
+   Landing scope — OLED-first near-black.
+   "Made for the dark. Optimized for OLED." The marketing page must live in
+   the same darkness as the product it sells: true-black-leaning surfaces so
+   OLED panels switch pixels off, with one restrained violet accent.
+   Scoped to the dark theme so Light Mode gives the landing warm paper instead.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .landing {
+  --bg-base: #08080b;
+  --bg-surface: #0d0d12;
+  --bg-elevated: #13131a;
+  --bg-card: #101017;
+  --bg-card-hover: #16161f;
+  --bg-inset: #0a0a0f;
+
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-default: rgba(255, 255, 255, 0.13);
+  --border-strong: rgba(255, 255, 255, 0.26);
+  --border-hairline: rgba(255, 255, 255, 0.1);
+
+  --text-primary: #f4f4f7;
+  --text-secondary: #a9a9b6; /* body copy — AA on #08080B */
+  --text-muted: #7c7c8a; /* meta copy — AA on #08080B */
+
+  --accent-purple: #7c6dff; /* brand violet */
+  --accent-purple-dim: rgba(124, 109, 255, 0.14);
+  --accent-blue: #6f9bff;
+  --accent-glow: rgba(124, 109, 255, 0.28);
+}
+
+/* Landing in Light Mode — warm editorial paper, same bold type, deepened
+   accent. Only a few tokens differ from the light dashboard base; the rest
+   inherit from :root[data-theme="light"]. */
+[data-theme="light"] .landing {
+  --bg-base: #f5efe2;
+  --bg-surface: #fbf7ee;
+  --bg-elevated: #efe7d6;
+  --bg-card: #fbf7ee;
+  --bg-card-hover: #f4ecdc;
+  --bg-inset: #e9e0cd;
+}
+
+/* Page canvas follows the scope so the OLED page never flashes light. */
+[data-theme="dark"] body:has(.landing) {
+  background-color: #08080b;
+}
+/* Landing selection + focus read as brand violet on dark. On paper the base
+   violet focus/selection already reads well, so Light Mode inherits them. */
+[data-theme="dark"] .landing ::selection {
+  background: var(--accent-purple);
+  color: #ffffff;
+}
+[data-theme="dark"] .landing :focus-visible {
+  outline-color: var(--accent-purple);
 }
 
 /* Dark island inside the editorial page (bottom CTA + footer), and the
-   default scope for the dashboard shell. Re-maps the same contract. */
-.theme-dark {
+   default scope for the dashboard shell. Re-maps the same contract.
+   Scoped to the dark theme; in Light Mode these surfaces use the warm-paper
+   base tokens instead. */
+[data-theme="dark"] .theme-dark {
   --bg-base: #111114;
   --bg-surface: #19191f;
   --bg-elevated: #1f1f27;
@@ -131,6 +267,23 @@ body:has(.landing) {
   --accent-purple: #7c6dff;
   --accent-purple-dim: rgba(124, 109, 255, 0.16);
   --accent-glow: rgba(124, 109, 255, 0.3);
+}
+/* Dashboard shell in Light Mode — clean warm paper (matches the base). */
+[data-theme="light"] .theme-dark {
+  --bg-base: #faf7f0;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f2ede2;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f7f2e8;
+  --bg-inset: #efe9dc;
+
+  --text-primary: #1d1a13;
+  --text-secondary: #4b463a;
+  --text-muted: #6d675a;
+
+  --accent-purple: #5b4ddb;
+  --accent-purple-dim: rgba(91, 77, 219, 0.1);
+  --accent-glow: rgba(91, 77, 219, 0.16);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -190,19 +343,14 @@ h4 {
   background: var(--accent-purple);
   color: #ffffff;
 }
-.landing ::selection {
-  background: #111111;
-  color: #f2f2f2;
-}
+/* Landing selection/focus are themed in the token section above
+   ([data-theme="dark"] .landing) — Light Mode inherits the base violet. */
 
 /* ── Focus ──────────────────────────────────────────────────────────── */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 2px;
-}
-.landing :focus-visible {
-  outline-color: #111111;
 }
 
 /* ── Skip link ──────────────────────────────────────────────────────── */
@@ -332,6 +480,92 @@ h4 {
 }
 .noctra-card:hover {
   border-color: var(--border-default);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Theme toggle — compact segmented radiogroup (Light / Dark / System).
+   Reads only semantic tokens so it renders correctly in both themes.
+   No pill or giant rounded corners — modest radius, thin border,
+   restrained selected-state background, keyboard accessible.
+   ═══════════════════════════════════════════════════════════════════════ */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: visible;
+}
+.theme-toggle-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 0;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: capitalize;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.theme-toggle-opt:hover {
+  color: var(--text-primary);
+}
+.theme-toggle-opt.is-active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+.theme-toggle-label {
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+/* Collapse the text label on very narrow viewports, keeping the icon. */
+@media (max-width: 420px) {
+  .theme-toggle-label {
+    display: none;
+  }
+  .theme-toggle-opt {
+    padding: 7px 5px;
+    font-size: 0.625rem;
+  }
+}
+/* Landing header: compact icon-only toggle (space beside the CTA). */
+.header-theme .theme-toggle-label {
+  display: none;
+}
+.header-theme .theme-toggle-opt {
+  padding: 7px 5px;
+}
+/* Dashboard sidebar: vertical toggle that fits the narrow column. */
+.dash-theme {
+  margin: 18px 0 4px;
+}
+.dash-theme .theme-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+}
+.dash-theme .theme-toggle-opt {
+  justify-content: flex-start;
+  border-radius: var(--radius-md);
+  padding: 6px 8px;
+  font-size: 0.6875rem;
+}
+.dash-theme .theme-toggle-label {
+  display: inline;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

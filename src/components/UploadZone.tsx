@@ -20,6 +20,15 @@ import {
   createOutputResourceRegistry,
   type OutputResourceRegistry,
 } from "@/lib/output-resources";
+import { DarkSweep } from "@/components/DarkSweep";
+import {
+  createSweep,
+  sweepFinalizing,
+  sweepPreview,
+  sweepSettle,
+  sweepTick,
+  type SweepState,
+} from "@/lib/dark-sweep";
 
 type Phase =
   | "idle"
@@ -56,6 +65,13 @@ interface UploadState {
    * facts). Rendered in a disclosure on the done card; never auto-sent.
    */
   diagnostics?: string;
+  /**
+   * The Dark Sweep state for the current/last run — driven exclusively by
+   * real converter events (see lib/dark-sweep.ts). Absent when no conversion
+   * has started (validation errors, idle) so no strip ever implies progress
+   * that never happened.
+   */
+  sweep?: SweepState;
 }
 
 interface UploadZoneProps {
@@ -65,9 +81,13 @@ interface UploadZoneProps {
    * conversion shows up without polling or a reload.
    */
   onConversionSettled?: () => void;
+  bypassAuth?: boolean;
 }
 
-export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
+export function UploadZone({
+  onConversionSettled,
+  bypassAuth = false,
+}: UploadZoneProps = {}) {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iconRef = useRef<HTMLDivElement>(null);
@@ -105,16 +125,19 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
     resources.releaseAll();
   }, [resources]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    conversionControllerRef.current?.abort();
-    conversionControllerRef.current = null;
-    releaseCurrentResources();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      conversionControllerRef.current?.abort();
+      conversionControllerRef.current = null;
+      releaseCurrentResources();
+    };
   }, [releaseCurrentResources]);
 
   const processFile = useCallback(
     async (file: File, retryHistoryId?: string | null) => {
-      if (!user) return;
+      if (!user && !bypassAuth) return;
 
       conversionControllerRef.current?.abort();
       releaseCurrentResources();
@@ -143,6 +166,7 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
         progress: 5,
         progressLabel: "Preparing…",
         originalUrl,
+        sweep: createSweep(),
       });
 
       const controller = new AbortController();
@@ -175,6 +199,9 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
                 ...s,
                 phase: "finalizing",
                 progress: Math.max(s.progress, 90),
+                // Finalisation only begins after the sequential page loop
+                // returns, so every page is provably swept by now.
+                sweep: s.sweep ? sweepFinalizing(s.sweep) : undefined,
               }));
             }
           },
@@ -192,6 +219,18 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
                   : ext === "docx"
                     ? `Updating document part ${page} of ${total}…`
                     : `Converting page ${page} of ${total}…`,
+              // Real sweep event: this page's work began (pages 1..page-1
+              // are proven finished — the loop is sequential).
+              sweep: sweepTick(s.sweep ?? createSweep(), page, total),
+            }));
+          },
+          onPagePreview: (page, _total, preview) => {
+            if (conversionControllerRef.current !== controller) return;
+            // Real thumbnails from the converter's canvas — the only thing
+            // allowed to show actual page content in the sweep strip.
+            setState((s) => ({
+              ...s,
+              sweep: sweepPreview(s.sweep ?? createSweep(), page, preview),
             }));
           },
           onFinalizing: (label) => {
@@ -230,6 +269,7 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
               outputUrl: outputDataUrl,
               outputFileName: outputName,
               quality,
+              sweep: s.sweep ? sweepSettle(s.sweep, "complete") : undefined,
             }));
             // Real byte size of the produced file (the blob URL is in-memory,
             // so this read is instant) — feeds the diagnostics disclosure.
@@ -262,6 +302,9 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
               error,
               progress: 0,
               originalUrl: undefined,
+              // The strip freezes at the truth: swept pages stay dark,
+              // unproven ones never claim completion.
+              sweep: s.sweep ? sweepSettle(s.sweep, "failed") : undefined,
             }));
             onConversionSettled?.();
           },
@@ -274,6 +317,7 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
               error: "Conversion cancelled.",
               progress: 0,
               originalUrl: undefined,
+              sweep: s.sweep ? sweepSettle(s.sweep, "cancelled") : undefined,
             }));
             onConversionSettled?.();
           },
@@ -294,7 +338,7 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
         retryHistoryId ? { historyId: retryHistoryId } : {}
       );
     },
-    [onConversionSettled, profile, releaseCurrentResources, resources, user]
+    [bypassAuth, onConversionSettled, profile, releaseCurrentResources, resources, user]
   );
 
   // ─── Drag feedback (small, decorative only) ────────────────────────────
@@ -436,23 +480,60 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
           {/* Applies to the next conversion only — never re-processes a
               finished result. Lives outside the clickable drop zone so the
               select never triggers the file picker. */}
-          <label className="profile-row">
-            <span>Dark theme</span>
-            <select
-              value={profile}
-              onChange={(e) =>
-                setProfile(e.target.value as ConversionProfileId)
-              }
-              disabled={state.phase === "dragover"}
+          <div className="profile-block">
+            <div className="profile-head">
+              <span className="profile-label">Dark theme</span>
+              <button
+                type="button"
+                className="profile-reset"
+                onClick={() => setProfile(DEFAULT_CONVERSION_PROFILE)}
+                disabled={profile === DEFAULT_CONVERSION_PROFILE}
+              >
+                Reset
+              </button>
+            </div>
+            <div
+              className="profile-options"
+              role="radiogroup"
               aria-label="Dark theme applied to the conversion"
             >
-              {CONVERSION_PROFILES.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              {CONVERSION_PROFILES.map((p) => {
+                const active = p.id === profile;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`profile-option ${active ? "is-active" : ""}`}
+                    onClick={() => setProfile(p.id)}
+                  >
+                    <span
+                      className="profile-swatch"
+                      aria-hidden="true"
+                      style={{
+                        background: `rgb(${p.background.r} ${p.background.g} ${p.background.b})`,
+                        borderColor: `rgb(${p.surface.r} ${p.surface.g} ${p.surface.b})`,
+                      }}
+                    >
+                      <span
+                        className="profile-swatch-dot"
+                        style={{
+                          background: `rgb(${p.accent.r} ${p.accent.g} ${p.accent.b})`,
+                        }}
+                      />
+                    </span>
+                    <span className="profile-option-text">
+                      <span className="profile-option-label">{p.label}</span>
+                      <span className="profile-option-desc">
+                        {p.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </>
       )}
 
@@ -483,9 +564,25 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
             <p className="prog-pct">{state.progress}%</p>
           </div>
 
-          <p className="prog-note">
-             Transforming in your browser — no upload needed. DOCX remains editable; PDF export is not performed here.
-          </p>
+          {/* The Dark Sweep — real page events, real thumbnails. */}
+          {state.sweep && state.sweep.total > 0 && (
+            <DarkSweep sweep={state.sweep} noun={sweepNounFor(state.fileName)} />
+          )}
+
+          <div className="prog-actions">
+            {/* Real cancellation — aborts the in-flight conversion. */}
+            <button
+              type="button"
+              onClick={() => conversionControllerRef.current?.abort()}
+              className="noctra-btn-secondary prog-cancel"
+            >
+              Cancel
+            </button>
+            <p className="prog-note">
+              Transforming in your browser — no upload needed. DOCX remains
+              editable; PDF export is not performed here.
+            </p>
+          </div>
         </div>
       )}
 
@@ -598,6 +695,14 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
             <p className="error-title">Something went wrong</p>
             <p className="error-msg">{state.error}</p>
           </div>
+          {/* Frozen sweep: shows exactly which pages reached dark before the
+              run stopped — never implies the untouched pages converted.
+              Wrapped so the block owns a full flex row in the error card. */}
+          {state.sweep && state.sweep.started > 0 && (
+            <div className="error-sweep">
+              <DarkSweep sweep={state.sweep} noun={sweepNounFor(state.fileName)} />
+            </div>
+          )}
           <div className="error-actions">
             {/* Real retry: re-runs the retained file against the same history
                 record, so a recoverable failure needs no re-upload and adds
@@ -618,23 +723,105 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
         }
 
         /* ── Profile picker (idle only) ── */
-        .profile-row {
+        .profile-block {
+          margin-top: 20px;
+        }
+        .profile-head {
           display: flex;
           align-items: center;
-          justify-content: center;
-          gap: 8px;
-          margin-top: 12px;
-          color: var(--text-muted);
-          font-size: 0.75rem;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
         }
-        .profile-row select {
-          min-height: 38px;
+        .profile-label {
+          color: var(--text-muted);
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+        }
+        .profile-reset {
+          background: transparent;
           border: 1px solid var(--border-default);
           border-radius: var(--radius-pill);
-          background: var(--bg-base);
-          color: var(--text-primary);
-          padding: 0 12px;
+          color: var(--text-secondary);
           font: inherit;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          padding: 6px 14px;
+          cursor: pointer;
+          transition: color var(--transition-fast),
+            border-color var(--transition-fast);
+        }
+        .profile-reset:hover:not(:disabled) {
+          color: var(--text-primary);
+          border-color: var(--border-strong);
+        }
+        .profile-reset:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+        .profile-options {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+        .profile-option {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          text-align: left;
+          padding: 12px 14px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          cursor: pointer;
+          transition: border-color var(--transition-fast),
+            background var(--transition-fast);
+        }
+        .profile-option:hover {
+          border-color: var(--border-default);
+        }
+        .profile-option.is-active {
+          border-color: var(--accent-purple);
+          background: var(--accent-purple-dim);
+        }
+        .profile-swatch {
+          flex-shrink: 0;
+          width: 34px;
+          height: 34px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          display: grid;
+          place-items: center;
+        }
+        .profile-swatch-dot {
+          width: 11px;
+          height: 11px;
+          border-radius: 50%;
+        }
+        .profile-option-text {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .profile-option-label {
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+        .profile-option-desc {
+          font-size: 0.75rem;
+          line-height: 1.45;
+          color: var(--text-secondary);
+        }
+        @media (min-width: 560px) {
+          .profile-options {
+            grid-template-columns: repeat(2, 1fr);
+          }
         }
 
         /* ── Drop zone ── */
@@ -791,8 +978,19 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
           font-size: 0.8125rem;
           line-height: 1.5;
           color: var(--text-muted);
+        }
+        .prog-actions {
+          display: flex;
+          align-items: center;
+          gap: 16px;
           padding-top: 20px;
           border-top: 1px solid var(--border-hairline);
+          flex-wrap: wrap;
+        }
+        .prog-cancel {
+          flex-shrink: 0;
+          min-height: 38px;
+          padding: 9px 20px;
         }
 
         /* ── Done ── */
@@ -993,6 +1191,12 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
           flex-shrink: 0;
           flex-wrap: wrap;
         }
+        /* The frozen sweep strip owns a full row inside the flex error card. */
+        .error-sweep {
+          flex-basis: 100%;
+          min-width: 100%;
+          margin-top: 4px;
+        }
         .error-retry {
           flex-shrink: 0;
         }
@@ -1002,6 +1206,14 @@ export function UploadZone({ onConversionSettled }: UploadZoneProps = {}) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+
+/** Unit noun the sweep strip uses for this document type. */
+function sweepNounFor(fileName?: string): "page" | "slide" | "part" {
+  const ext = fileName?.split(".").pop()?.toLowerCase();
+  if (ext === "pptx") return "slide";
+  if (ext === "docx") return "part";
+  return "page";
+}
 
 /**
  * Collapsed-by-default diagnostics for one conversion run. The JSON is shown

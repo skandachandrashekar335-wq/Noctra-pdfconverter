@@ -5,6 +5,7 @@ import { AuthGuard } from "@/components/AuthGuard";
 import { UploadZone } from "@/components/UploadZone";
 import { ConversionList } from "@/components/ConversionList";
 import { BatchUploadZone } from "@/components/BatchUploadZone";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/useAuth";
 import Image from "next/image";
 import Link from "next/link";
@@ -53,8 +54,12 @@ function DashboardContent() {
 
         <nav className="dash-nav" aria-label="Dashboard navigation">
           <NavItem icon={<UploadNavIcon />} label="Convert" active />
-          <NavItem icon={<HistoryNavIcon />} label="History" />
+          <NavItem icon={<HistoryNavIcon />} label="History" href="#history" />
         </nav>
+
+        <div className="dash-theme">
+          <ThemeToggle />
+        </div>
 
         <div className="dash-profile">
           {user?.photoURL ? (
@@ -112,6 +117,7 @@ function DashboardContent() {
           {/* Conversion history */}
           <section
             className="dash-history-section"
+            id="history"
             aria-label="Recent conversions"
           >
             <div className="dash-section-head">
@@ -338,20 +344,93 @@ function NavItem({
   icon,
   label,
   active,
+  href,
 }: {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  href?: string;
 }) {
-  return (
-    <button
-      className={`nav-item ${active ? "active" : ""}`}
-      aria-current={active ? "page" : undefined}
-    >
+  const inner = (
+    <>
       <span className="nav-icon" aria-hidden="true">
         {icon}
       </span>
       <span className="nav-label">{label}</span>
+    </>
+  );
+
+  // The current page is a non-interactive marker; anything with an href is a
+  // real link so navigation never dead-ends in a do-nothing button.
+  if (href) {
+    return (
+      <a
+        href={href}
+        className="nav-item"
+        onClick={(e) => {
+          // Same-page anchor: scroll smoothly without a full navigation.
+          const target = document.querySelector(href);
+          if (target) {
+            e.preventDefault();
+            target.scrollIntoView({
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "auto"
+                : "smooth",
+              block: "start",
+            });
+          }
+        }}
+      >
+        {inner}
+        <style jsx>{`
+          .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            padding: 11px 12px;
+            border: none;
+            border-left: 2px solid transparent;
+            border-radius: 0;
+            background: transparent;
+            color: var(--text-muted);
+            font-family: var(--font-body);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            text-align: left;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color var(--transition-fast),
+              background var(--transition-fast),
+              border-color var(--transition-fast);
+          }
+          .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+          }
+          .nav-icon {
+            flex-shrink: 0;
+            display: inline-flex;
+          }
+          .nav-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+        `}</style>
+      </a>
+    );
+  }
+
+  return (
+    <span
+      className={`nav-item ${active ? "active" : ""}`}
+      aria-current={active ? "page" : undefined}
+    >
+      {inner}
       <style jsx>{`
         .nav-item {
           display: flex;
@@ -375,10 +454,6 @@ function NavItem({
             background var(--transition-fast),
             border-color var(--transition-fast);
         }
-        .nav-item:hover {
-          background: var(--bg-elevated);
-          color: var(--text-primary);
-        }
         .nav-item.active {
           border-left-color: var(--accent-purple);
           color: var(--text-primary);
@@ -394,7 +469,7 @@ function NavItem({
           white-space: nowrap;
         }
       `}</style>
-    </button>
+    </span>
   );
 }
 

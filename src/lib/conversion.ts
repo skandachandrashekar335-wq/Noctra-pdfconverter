@@ -43,6 +43,7 @@ import {
 import type { ConversionPhase, ConversionStatus } from "@/types";
 import type { ConversionProfileId } from "@/lib/conversion-profiles.ts";
 import { getConversionProfile } from "@/lib/conversion-profiles.ts";
+import type { PagePreview } from "@/lib/dark-sweep.ts";
 
 // Validation helpers live in a pure module so they can be unit tested
 // without Firebase; re-exported here to preserve the public API.
@@ -90,6 +91,16 @@ export interface ConversionCallbacks {
   /** Page/slide/part progress. Never fires for finalization work. */
   onProgress?: (page: number, total: number) => void;
   /**
+   * Dark Sweep: real before/after thumbnails for a page, captured from the
+   * render canvas around the transform (PDF only — DOCX/PPTX are structural
+   * transforms with nothing to photograph). Fires at most once per capture,
+   * never for pages beyond the converter's preview cap, and only while the
+   * conversion is still running. Purely observational: previews never move
+   * progress, never count as completion evidence on their own beyond the
+   * page they describe, and a preview failure never surfaces as an error.
+   */
+  onPagePreview?: (page: number, total: number, preview: PagePreview) => void;
+  /**
    * Finalization sub-progress: labels like "Serializing PDF…" that cover the
    * work between the last page tick and a valid output. Fires while the phase
    * is `finalizing`.
@@ -121,6 +132,7 @@ export interface ConversionCallbacks {
 export interface ConverterHandlers {
   onProgress: (page: number, total: number) => void;
   onFinalizing: (label: string) => void;
+  onPagePreview?: (page: number, total: number, preview: PagePreview) => void;
   profile?: ConversionProfileId;
   signal: AbortSignal;
 }
@@ -217,7 +229,8 @@ const defaultConverter: ConverterFn = async (fileType, buffer, handlers) => {
       track,
       handlers.profile,
       handlers.signal,
-      handlers.onFinalizing
+      handlers.onFinalizing,
+      handlers.onPagePreview
     );
     const { stats, pages, profileId } = converted;
     const pct = (count: number) =>
@@ -281,16 +294,20 @@ function yieldToEventLoop(): Promise<void> {
 }
 
 /**
- * Race a promise against a stage-scoped timeout. On timeout, reject with an
- * error naming the stage so the UI can say *where* work stopped, not just
- * that something did. A settled input promise wins untouched.
+ * Race a promise or lazy operation against a stage-scoped timeout.
+ * Accepts either a Promise or a factory function returning a Promise so the
+ * timeout timer is guaranteed to be armed before the operation begins.
+ * On timeout, reject with an error naming the stage so the UI can say *where*
+ * work stopped, not just that something did.
  */
 function withStageTimeout<T>(
-  promise: Promise<T>,
+  operation: Promise<T> | (() => Promise<T>),
   timeoutMs: number,
   stage: string
 ): Promise<T> {
-  if (timeoutMs <= 0) return promise;
+  if (timeoutMs <= 0) {
+    return typeof operation === "function" ? operation() : operation;
+  }
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(
@@ -300,6 +317,16 @@ function withStageTimeout<T>(
         )
       );
     }, timeoutMs);
+
+    let promise: Promise<T>;
+    try {
+      promise = typeof operation === "function" ? operation() : operation;
+    } catch (syncErr) {
+      clearTimeout(timer);
+      reject(syncErr);
+      return;
+    }
+
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -322,6 +349,7 @@ export async function runConversion(
     onStatusChange,
     onPhase,
     onProgress,
+    onPagePreview,
     onFinalizing,
     onConversionId,
     onComplete,
@@ -478,6 +506,13 @@ export async function runConversion(
           bumpWatchdog();
           onProgress?.(page, total);
         },
+        onPagePreview: (page, total, preview) => {
+          // Cosmetic only: no watchdog bump (previews are not liveness
+          // evidence — the progress tick already carries that) and no
+          // emission after a terminal state (a frozen strip stays frozen).
+          if (settled) return;
+          onPagePreview?.(page, total, preview);
+        },
         onFinalizing: (label) => {
           if (settled) return;
           bumpWatchdog();
@@ -528,7 +563,7 @@ export async function runConversion(
       deps.validationTimeoutMs ?? DEFAULT_VALIDATION_TIMEOUT_MS;
     try {
       await withStageTimeout(
-        validate(result.bytes, fileType, result.pageCount),
+        () => validate(result.bytes, fileType, result.pageCount),
         validationTimeoutMs,
         "Output validation"
       );

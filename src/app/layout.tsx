@@ -2,6 +2,32 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/components/ThemeProvider";
+
+/**
+ * No-flash theme bootstrap. Runs synchronously before first paint so the
+ * correct `data-theme` is on <html> from the very first frame — no light
+ * flash on load for returning dark-mode users, and no flicker for light-mode
+ * users. Mirrors the exact resolution logic in `lib/theme.ts`:
+ *   stored explicit choice  →  that theme
+ *   otherwise (or "system") →  OS prefers-color-scheme (dark by default)
+ * Wrapped in try/catch because storage can throw (private mode / sandbox).
+ */
+const themeBootstrap = `
+(function () {
+  try {
+    var stored = localStorage.getItem("noctra:app-theme");
+    var pref = stored === "light" || stored === "dark" ? stored : null;
+    var dark = window.matchMedia
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+      : true;
+    var resolved = pref || (dark === false ? "light" : "dark");
+    document.documentElement.setAttribute("data-theme", resolved);
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+`;
 
 /**
  * Self-hosted fonts (no external font CDN at runtime).
@@ -72,7 +98,11 @@ export default function RootLayout({
       className={`${clashDisplay.variable} ${satoshi.variable} ${editorialSerif.variable}`}
     >
       <body className="antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        {/* Set data-theme before the first paint (see themeBootstrap above). */}
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

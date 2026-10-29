@@ -76,10 +76,14 @@ export function BatchUploadZone() {
   const completed = useMemo(() => items.filter((item) => item.status === "completed" && item.outputUrl), [items]);
   const finished = items.filter((item) => item.status === "completed" || item.status === "failed" || item.status === "cancelled").length;
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    controllersRef.current.forEach((controller) => controller.abort());
-    resources.releaseAll();
+  useEffect(() => {
+    mountedRef.current = true;
+    const controllers = controllersRef.current;
+    return () => {
+      mountedRef.current = false;
+      controllers.forEach((controller) => controller.abort());
+      resources.releaseAll();
+    };
   }, [resources]);
 
   const addFiles = useCallback((files: File[]) => {

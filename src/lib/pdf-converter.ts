@@ -33,6 +33,7 @@ import {
   type ConversionProfile,
   type ConversionProfileId,
 } from "./conversion-profiles.ts";
+import type { PagePreview } from "./dark-sweep.ts";
 
 // PDF.js and pdf-lib are loaded lazily to avoid SSR issues
 type PDFDocumentProxy = import("pdfjs-dist").PDFDocumentProxy;
@@ -101,13 +102,32 @@ export interface PdfConversionResult {
   stats: PdfPixelStats;
 }
 
+/**
+ * Receives real thumbnails of a page captured around the dark transform —
+ * `before` fires once the page has rendered (still light), `after` once the
+ * transform has been applied. Purely observational: previews are capped for
+ * very large documents, every capture step is best-effort, and a preview
+ * failure never fails or delays a conversion beyond its own tiny encode.
+ */
+export type PagePreviewReporter = (
+  page: number,
+  total: number,
+  preview: PagePreview
+) => void;
+
+/** Longest edge of a Dark Sweep thumbnail, in device pixels. */
+const PREVIEW_THUMB_WIDTH = 160;
+/** Pages beyond this cap skip capture so huge documents stay memory-bounded. */
+const PREVIEW_PAGE_CAP = 250;
+
 /** Convert a single PDF file (as ArrayBuffer) to a dark-mode PDF */
 export async function convertPdfToDarkMode(
   inputBuffer: ArrayBuffer,
   onProgress?: (page: number, total: number) => void,
   profileId?: ConversionProfileId,
   signal?: AbortSignal,
-  onFinalizing?: FinalizingReporter
+  onFinalizing?: FinalizingReporter,
+  onPagePreview?: PagePreviewReporter
 ): Promise<PdfConversionResult> {
   const profile = getConversionProfile(profileId);
   // Lazy load to avoid SSR and keep initial bundle small
@@ -138,6 +158,7 @@ export async function convertPdfToDarkMode(
       onProgress,
       signal,
       onFinalizing,
+      onPagePreview,
       PDFDocument,
       StandardFonts,
     });
@@ -163,6 +184,7 @@ interface RenderDarkPdfArgs {
   onProgress?: (page: number, total: number) => void;
   signal?: AbortSignal;
   onFinalizing?: FinalizingReporter;
+  onPagePreview?: PagePreviewReporter;
   PDFDocument: typeof import("pdf-lib").PDFDocument;
   StandardFonts: typeof import("pdf-lib").StandardFonts;
 }
@@ -173,6 +195,7 @@ async function renderDarkPdf({
   onProgress,
   signal,
   onFinalizing,
+  onPagePreview,
   PDFDocument,
   StandardFonts,
 }: RenderDarkPdfArgs): Promise<PdfConversionResult> {
@@ -242,6 +265,21 @@ async function renderDarkPdf({
     }
     if (signal?.aborted) throw new DOMException("Conversion cancelled.", "AbortError");
 
+    // Dark Sweep: capture the real *light* page while the tile that shows it
+    // is mid-sweep. Best-effort by design — a preview problem warns and the
+    // conversion continues untouched.
+    if (onPagePreview && pageNum <= PREVIEW_PAGE_CAP) {
+      try {
+        const beforeThumb = scalePreviewThumb(canvas);
+        if (beforeThumb) {
+          const before = await encodePreviewDataUrl(beforeThumb);
+          if (before && !signal?.aborted) onPagePreview(pageNum, numPages, { before });
+        }
+      } catch (err) {
+        console.warn("Noctra: light-page preview skipped", err);
+      }
+    }
+
     // Apply intelligent dark transform to pixel data
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     applyDarkTransform(imageData.data, profile, stats);
@@ -278,6 +316,20 @@ async function renderDarkPdf({
     // Encoding is the longest single-page step — check again before the
     // embed/text-layer work so cancellation stays responsive.
     if (signal?.aborted) throw abortError();
+
+    // Dark Sweep: the transform has landed on this page — capture the real
+    // *dark* result as proof the page was swept. Same best-effort rules.
+    if (onPagePreview && pageNum <= PREVIEW_PAGE_CAP) {
+      try {
+        const afterThumb = scalePreviewThumb(canvas);
+        if (afterThumb) {
+          const after = await encodePreviewDataUrl(afterThumb);
+          if (after && !signal?.aborted) onPagePreview(pageNum, numPages, { after });
+        }
+      } catch (err) {
+        console.warn("Noctra: dark-page preview skipped", err);
+      }
+    }
 
     // Original page dimensions (points, 72dpi)
     const scaleOneViewport = page.getViewport({ scale: 1 });
@@ -459,4 +511,54 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
       0.92
     );
   });
+}
+
+/* ── Dark Sweep thumbnails ────────────────────────────────────────────── */
+
+/**
+ * Downscale a canvas copy to preview size. Synchronous and defensive: any
+ * failure returns null so the caller simply captures no thumbnail.
+ */
+function scalePreviewThumb(
+  canvas: OffscreenCanvas | HTMLCanvasElement
+): OffscreenCanvas | HTMLCanvasElement | null {
+  try {
+    const { width, height } = canvas;
+    if (!width || !height) return null;
+    const tw = Math.min(PREVIEW_THUMB_WIDTH, width);
+    const th = Math.max(1, Math.round((height * tw) / width));
+    const thumb = createCanvas(tw, th);
+    const tctx = thumb.getContext("2d") as CanvasRenderingContext2D | null;
+    if (!tctx) return null;
+    tctx.drawImage(canvas, 0, 0, tw, th);
+    return thumb;
+  } catch {
+    return null;
+  }
+}
+
+/** Base64-encode a small JPEG blob as a data URL (chunk-free: thumbs are tiny). */
+async function previewBlobToDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return `data:image/jpeg;base64,${btoa(binary)}`;
+}
+
+/**
+ * Encode a thumbnail to a JPEG data URL. Browser canvas paths only — in
+ * runtimes without a blob-encoding canvas this returns null and the
+ * conversion proceeds without previews (skeleton tiles in the strip).
+ */
+async function encodePreviewDataUrl(
+  thumb: OffscreenCanvas | HTMLCanvasElement
+): Promise<string | null> {
+  if (typeof OffscreenCanvas !== "undefined" && thumb instanceof OffscreenCanvas) {
+    const blob = await thumb.convertToBlob({ type: "image/jpeg", quality: 0.72 });
+    return previewBlobToDataUrl(blob);
+  }
+  if (typeof HTMLCanvasElement !== "undefined" && thumb instanceof HTMLCanvasElement) {
+    return previewBlobToDataUrl(await canvasToBlob(thumb));
+  }
+  return null;
 }

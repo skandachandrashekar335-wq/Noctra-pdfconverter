@@ -159,7 +159,7 @@ export function GoogleSignInButton({
           border: 0;
           border-radius: 0;
           background: transparent;
-          color: rgba(242, 242, 242, 0.82);
+          color: var(--ink-82);
           font-size: 0.9375rem;
           font-weight: 400;
           letter-spacing: normal;
@@ -168,19 +168,19 @@ export function GoogleSignInButton({
         }
         .google-signin-btn--footer:hover:not(:disabled) {
           background: transparent;
-          color: #f2f2f2;
+          color: var(--text-primary);
           text-decoration: underline;
           text-underline-offset: 4px;
           transform: none;
         }
         .google-signin-btn--invert {
           background: transparent;
-          color: #f2f2f2;
-          border-color: #f2f2f2;
+          color: var(--text-primary);
+          border-color: var(--text-primary);
         }
         .google-signin-btn--invert:hover:not(:disabled) {
-          background: #f2f2f2;
-          color: #111111;
+          background: var(--text-primary);
+          color: var(--bg-base);
         }
         .signin-spinner {
           width: 16px;

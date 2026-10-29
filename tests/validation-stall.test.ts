@@ -162,4 +162,36 @@ describe("output validation stall (stuck at 96%)", () => {
     assert.ok(error, "onError must fire");
     assert.match(error ?? "", /missing required parts/);
   });
+
+  test("lazy validation timing out arms timer before synchronous or slow validator runs", async () => {
+    const file = await pptxFile();
+    const runConverter: ConverterFn = async () => ({
+      bytes: await pptxBytes(),
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      pageCount: 1,
+    });
+    let error: string | null = null;
+
+    await runConversion(
+      file,
+      {
+        onError: (m) => {
+          error = m;
+        },
+      },
+      {
+        historyStore: null,
+        runConverter,
+        validateOutput: () => new Promise<void>((_, reject) => {
+          // Simulate validator that hangs longer than timeout
+          setTimeout(() => reject(new Error("late rejection")), 500);
+        }),
+        validationTimeoutMs: 50,
+      }
+    );
+
+    assert.ok(error, "onError must fire on timeout");
+    assert.match(error ?? "", /timed out after 0s/);
+  });
 });
