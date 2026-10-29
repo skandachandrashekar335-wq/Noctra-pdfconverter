@@ -5,7 +5,9 @@ import { AuthGuard } from "@/components/AuthGuard";
 import { UploadZone } from "@/components/UploadZone";
 import { ConversionList } from "@/components/ConversionList";
 import { BatchUploadZone } from "@/components/BatchUploadZone";
+import { StudyStudio } from "@/components/StudyStudio";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { useAuth } from "@/hooks/useAuth";
 import Image from "next/image";
 import Link from "next/link";
@@ -19,8 +21,11 @@ export default function DashboardPage() {
 }
 
 function DashboardContent() {
-  const { user, profile, signOut, error, clearError, configError } = useAuth();
+  const { user, profile, signOut, deleteAccount, error, clearError, configError } = useAuth();
+  const [activeTab, setActiveTab] = useState<"convert" | "library" | "study" | "settings">("convert");
   const [signingOut, setSigningOut] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   // Bumped whenever a conversion settles so the history list refetches.
   // The list may still be mid-write at that instant, hence the short delay.
   const [historyRefresh, setHistoryRefresh] = useState(0);
@@ -42,10 +47,61 @@ function DashboardContent() {
     }
   }
 
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    try {
+      await deleteAccount();
+    } catch (err) {
+      console.error("Account deletion failed:", err);
+    } finally {
+      setDeleting(false);
+      setShowDeleteModal(false);
+    }
+  }
+
   const shownError = configError ?? error;
 
   return (
     <div className="dash-shell theme-dark">
+      <OnboardingModal />
+
+      {/* ── Delete Account Confirmation Modal ────────────────────── */}
+      {showDeleteModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-md bg-[#0f1115] border border-red-900/50 rounded-2xl p-6 shadow-2xl">
+            <h3 id="delete-modal-title" className="text-lg font-bold text-red-400 mb-2">
+              Delete Account &amp; Stored Data
+            </h3>
+            <p className="text-sm text-zinc-300 mb-4 leading-relaxed">
+              Are you sure you want to permanently delete your account? This will erase all your conversion history, document tags, favorites, and reader bookmarks. This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                {deleting ? "Deleting..." : "Permanently Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Sidebar ─────────────────────────────────────────────── */}
       <aside className="dash-sidebar">
         <Link href="/" className="dash-logo" aria-label="Noctra home">
@@ -53,8 +109,30 @@ function DashboardContent() {
         </Link>
 
         <nav className="dash-nav" aria-label="Dashboard navigation">
-          <NavItem icon={<UploadNavIcon />} label="Convert" active />
-          <NavItem icon={<HistoryNavIcon />} label="History" href="#history" />
+          <NavItem
+            icon={<UploadNavIcon />}
+            label="Convert"
+            active={activeTab === "convert"}
+            onClick={() => setActiveTab("convert")}
+          />
+          <NavItem
+            icon={<HistoryNavIcon />}
+            label="Library"
+            active={activeTab === "library"}
+            onClick={() => setActiveTab("library")}
+          />
+          <NavItem
+            icon={<StudyNavIcon />}
+            label="Study AI"
+            active={activeTab === "study"}
+            onClick={() => setActiveTab("study")}
+          />
+          <NavItem
+            icon={<SettingsNavIcon />}
+            label="Settings"
+            active={activeTab === "settings"}
+            onClick={() => setActiveTab("settings")}
+          />
         </nav>
 
         <div className="dash-theme">
@@ -79,6 +157,12 @@ function DashboardContent() {
               {profile?.displayName ?? "User"}
             </p>
             <p className="dash-profile-email">{profile?.email}</p>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors mt-0.5 cursor-pointer block"
+            >
+              Delete account
+            </button>
           </div>
           <button
             onClick={handleSignOut}
@@ -90,6 +174,17 @@ function DashboardContent() {
             <SignOutIcon />
           </button>
         </div>
+
+        <div className="mt-4 pt-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-500">
+          <Link href="/privacy" className="hover:text-zinc-300 transition-colors">
+            Privacy
+          </Link>
+          <span>•</span>
+          <Link href="/terms" className="hover:text-zinc-300 transition-colors">
+            Terms
+          </Link>
+        </div>
+
         {shownError && (
           <p role="alert" className="dash-auth-error">
             {shownError}
@@ -100,38 +195,141 @@ function DashboardContent() {
       {/* ── Main ────────────────────────────────────────────────── */}
       <main className="dash-main">
         <div className="dash-main-inner">
-          {/* Header */}
-          <header className="dash-header">
-            <p className="dash-eyebrow">Workspace</p>
-            <h1 className="dash-title">Convert Document</h1>
-            <p className="dash-sub">
-               Upload a PDF, DOCX or PPTX to get a comfortable dark-mode version.
-            </p>
-          </header>
+          {activeTab === "convert" && (
+            <>
+              <header className="dash-header">
+                <p className="dash-eyebrow">Workspace</p>
+                <h1 className="dash-title">Convert Document</h1>
+                <p className="dash-sub">
+                  Upload a PDF, DOCX or PPTX to get a comfortable dark-mode version.
+                </p>
+              </header>
 
-          {/* Upload */}
-          <section aria-label="Upload document">
-            <UploadZone onConversionSettled={handleConversionSettled} />
-            <BatchUploadZone />
-          </section>
+              <section aria-label="Upload document">
+                <UploadZone onConversionSettled={handleConversionSettled} />
+                <BatchUploadZone />
+              </section>
 
-          {/* Conversion history */}
-          <section
-            className="dash-history-section"
-            id="history"
-            aria-label="Recent conversions"
-          >
-            <div className="dash-section-head">
-              <h2 className="dash-section-title">Recent conversions</h2>
-              <span className="dash-section-rule" aria-hidden="true" />
-            </div>
-            {/* Keyed by uid: switching accounts remounts the list, so the
-                previous user's rows can never flash into the new session. */}
-            <ConversionList
-              key={user?.uid ?? "anon"}
-              refreshToken={historyRefresh}
-            />
-          </section>
+              <section
+                className="dash-history-section"
+                id="history"
+                aria-label="Recent conversions"
+              >
+                <div className="dash-section-head">
+                  <h2 className="dash-section-title">Recent conversions</h2>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("library")}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors cursor-pointer"
+                  >
+                    View All in Library →
+                  </button>
+                  <span className="dash-section-rule" aria-hidden="true" />
+                </div>
+                <ConversionList
+                  key={user?.uid ?? "anon"}
+                  refreshToken={historyRefresh}
+                />
+              </section>
+            </>
+          )}
+
+          {activeTab === "library" && (
+            <>
+              <header className="dash-header">
+                <p className="dash-eyebrow">Smart Document Library</p>
+                <h1 className="dash-title">Your Converted Documents</h1>
+                <p className="dash-sub">
+                  Search, filter, tag, favorite, and open your dark-mode study documents directly in the reader.
+                </p>
+              </header>
+
+              <section aria-label="Document library">
+                <ConversionList
+                  key={user?.uid ?? "anon"}
+                  refreshToken={historyRefresh}
+                />
+              </section>
+            </>
+          )}
+
+          {activeTab === "study" && (
+            <>
+              <header className="dash-header">
+                <p className="dash-eyebrow">AI Study Assistant</p>
+                <h1 className="dash-title">Noctra Study Studio</h1>
+                <p className="dash-sub">
+                  Generate executive summaries, extract key concepts, practice tests, and revision plans from your study materials with Gemini.
+                </p>
+              </header>
+
+              <section aria-label="Study Studio">
+                <StudyStudio />
+              </section>
+            </>
+          )}
+
+          {activeTab === "settings" && (
+            <>
+              <header className="dash-header">
+                <p className="dash-eyebrow">Preferences &amp; Privacy</p>
+                <h1 className="dash-title">Workspace Settings</h1>
+                <p className="dash-sub">
+                  Manage application appearance, offline data isolation, and account preferences.
+                </p>
+              </header>
+
+              <section className="grid gap-6 max-w-2xl" aria-label="Settings options">
+                <div className="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
+                  <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wider mb-2">
+                    Interface Theme
+                  </h3>
+                  <p className="text-xs text-zinc-400 mb-4">
+                    Choose how Noctra looks across your devices. System mode matches your OS preference automatically.
+                  </p>
+                  <ThemeToggle />
+                </div>
+
+                <div className="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
+                  <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wider mb-2">
+                    Security &amp; Document Privacy
+                  </h3>
+                  <div className="space-y-3 text-xs text-zinc-300 leading-relaxed">
+                    <p>
+                      <strong>Zero-Server Document Processing:</strong> In local-first mode, all PDF, DOCX, and PPTX conversions are performed in your browser&apos;s Web Worker memory. Your original document contents never leave your device unless you explicitly opt into the AI Study Assistant.
+                    </p>
+                    <p>
+                      <strong>100% User Ownership:</strong> You retain complete, unrestricted copyright and ownership over all uploaded, converted, and exported documents.
+                    </p>
+                    <div className="flex gap-4 pt-2">
+                      <Link href="/privacy" className="text-indigo-400 hover:underline">
+                        Read Privacy Policy
+                      </Link>
+                      <Link href="/terms" className="text-indigo-400 hover:underline">
+                        Read Terms of Service
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 rounded-2xl bg-zinc-900/60 border border-red-900/30">
+                  <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-2">
+                    Danger Zone
+                  </h3>
+                  <p className="text-xs text-zinc-400 mb-4">
+                    Permanently delete your account and all associated conversion records, reader annotations, and tags.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(true)}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-red-600/90 hover:bg-red-600 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Delete My Account &amp; Data
+                  </button>
+                </div>
+              </section>
+            </>
+          )}
         </div>
       </main>
 
@@ -346,11 +544,13 @@ function NavItem({
   label,
   active,
   href,
+  onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
   href?: string;
+  onClick?: () => void;
 }) {
   const inner = (
     <>
@@ -360,6 +560,19 @@ function NavItem({
       <span className="nav-label">{label}</span>
     </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`nav-item ${active ? "active" : ""}`}
+        aria-current={active ? "page" : undefined}
+      >
+        {inner}
+      </button>
+    );
+  }
 
   // The current page is a non-interactive marker; anything with an href is a
   // real link so navigation never dead-ends in a do-nothing button.
@@ -590,6 +803,43 @@ function SignOutIcon() {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+function StudyNavIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
+function SettingsNavIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { documentKeyFromBytes } from "@/lib/document-key";
-import { hasUsableText, ocrCapabilityMessage } from "@/lib/ocr";
+import { hasUsableText, runClientOcr, type OcrPageProgress } from "@/lib/ocr";
 import {
   deleteReaderAnnotation,
   fetchReaderState,
@@ -84,6 +84,10 @@ export function PDFReader({ sourceUrl, fileName, onClose }: PDFReaderProps) {
   const [savingAnnotation, setSavingAnnotation] = useState(false);
   const [showThumbnails, setShowThumbnails] = useState(true);
   const [currentPageText, setCurrentPageText] = useState("");
+  const [ocrTextMap, setOcrTextMap] = useState<Record<number, string>>({});
+  const [ocrProgressMap, setOcrProgressMap] = useState<Record<number, OcrPageProgress>>({});
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const ocrTextRef = useRef<Record<number, string>>({});
   const [studyTask, setStudyTask] = useState<StudyTask>("summary");
   const [studyQuestion, setStudyQuestion] = useState("");
   const [studyConsent, setStudyConsent] = useState(false);
@@ -212,7 +216,9 @@ export function PDFReader({ sourceUrl, fileName, onClose }: PDFReaderProps) {
       if (cancelled) return;
       const textContent = await page.getTextContent();
       const textItems = (textContent as { items?: Array<{ str?: string }> }).items ?? [];
-      setCurrentPageText(textItems.map((item) => item.str ?? "").join(" ").trim());
+      const nativeText = textItems.map((item) => item.str ?? "").join(" ").trim();
+      const combinedText = nativeText || ocrTextRef.current[pageNumber] || "";
+      setCurrentPageText(combinedText);
       const pdfjs = await import("pdfjs-dist");
       const TextLayer = (pdfjs as unknown as { TextLayer: new (options: { textContentSource: unknown; container: HTMLElement; viewport: unknown }) => TextLayerLike }).TextLayer;
       if (TextLayer) {
@@ -265,7 +271,8 @@ export function PDFReader({ sourceUrl, fileName, onClose }: PDFReaderProps) {
       const needle = searchQuery.trim().toLocaleLowerCase();
       for (let page = 1; page <= pdf.numPages; page += 1) {
         const content = await (await pdf.getPage(page)).getTextContent() as { items?: Array<{ str?: string }> };
-        const text = (content.items ?? []).map((item) => item.str ?? "").join(" ").toLocaleLowerCase();
+        const pageOcr = ocrTextRef.current[page] ?? "";
+        const text = ((content.items ?? []).map((item) => item.str ?? "").join(" ") + " " + pageOcr).toLocaleLowerCase();
         if (text.includes(needle)) matches.push(page);
         if (cancelled) return;
       }
@@ -395,6 +402,24 @@ export function PDFReader({ sourceUrl, fileName, onClose }: PDFReaderProps) {
     setPageNumber(searchPages[next]);
   }
 
+  async function handleRunOcr() {
+    const canvas = canvasRef.current;
+    if (!canvas || ocrBusy) return;
+    setOcrBusy(true);
+    try {
+      const result = await runClientOcr(canvas, pageNumber, (progress) => {
+        setOcrProgressMap((prev) => ({ ...prev, [pageNumber]: progress }));
+      });
+      ocrTextRef.current[pageNumber] = result.text;
+      setOcrTextMap((prev) => ({ ...prev, [pageNumber]: result.text }));
+      setCurrentPageText((prev) => prev || result.text);
+    } catch {
+      setStorageNotice(`Optical character extraction for page ${pageNumber} was interrupted.`);
+    } finally {
+      setOcrBusy(false);
+    }
+  }
+
   const readerThemeClass = `reader-theme--${theme}`;
 
   return (
@@ -435,7 +460,34 @@ export function PDFReader({ sourceUrl, fileName, onClose }: PDFReaderProps) {
       </div>
 
       {storageNotice && <p className="reader-notice" role="status">{storageNotice}</p>}
-      {scannedPages.length > 0 && <p className="reader-notice" role="status">{scannedPages.length} page{scannedPages.length === 1 ? "" : "s"} appear to be scanned. {ocrCapabilityMessage()}</p>}
+      {scannedPages.length > 0 && (
+        <div className="reader-ocr-bar" role="region" aria-label="OCR options">
+          <span className="reader-ocr-badge">
+            {scannedPages.length} scanned page{scannedPages.length === 1 ? "" : "s"} detected
+          </span>
+          {scannedPages.includes(pageNumber) ? (
+            <div className="reader-ocr-current">
+              <span>Page {pageNumber} has no selectable text layer.</span>
+              {ocrProgressMap[pageNumber]?.status === "processing" ? (
+                <span className="reader-ocr-status">Processing OCR… {ocrProgressMap[pageNumber]?.progressPct ?? 0}%</span>
+              ) : ocrTextMap[pageNumber] ? (
+                <span className="reader-ocr-status reader-ocr-status--done">✓ OCR text ready ({ocrTextMap[pageNumber].length} characters)</span>
+              ) : (
+                <button
+                  type="button"
+                  className="reader-button reader-button--accent"
+                  onClick={() => void handleRunOcr()}
+                  disabled={ocrBusy}
+                >
+                  {ocrBusy ? "Extracting…" : "Extract text with OCR"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <span className="reader-ocr-status">Current page has selectable text.</span>
+          )}
+        </div>
+      )}
       {error && <div className="reader-error" role="alert"><p>{error}</p><button type="button" className="reader-button" onClick={() => setError(null)}>Dismiss</button></div>}
 
       <div className="reader-body">
@@ -478,6 +530,11 @@ export function PDFReader({ sourceUrl, fileName, onClose }: PDFReaderProps) {
         .reader-search input { width: 100%; padding: 0 11px; border-radius: var(--radius-sm); }
         .reader-theme select { padding: 0 9px; }
         .reader-notice, .reader-error { padding: 10px 12px; border: 1px solid var(--reader-border); border-radius: var(--radius-md); color: var(--reader-muted); font-size: .75rem; line-height: 1.5; }
+        .reader-ocr-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid var(--reader-border); border-radius: var(--radius-md); background: var(--reader-surface); font-size: .75rem; flex-wrap: wrap; }
+        .reader-ocr-badge { color: var(--reader-accent); font-weight: 600; font-size: .6875rem; text-transform: uppercase; letter-spacing: .08em; }
+        .reader-ocr-current { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .reader-ocr-status { color: var(--reader-muted); font-size: .75rem; }
+        .reader-ocr-status--done { color: #34d399; font-weight: 500; }
         .reader-error { display: flex; justify-content: space-between; gap: 12px; align-items: center; color: #f87171; }
         .reader-body { align-items: stretch; min-height: 560px; gap: 12px; }
         .reader-thumbnails { width: 92px; flex: 0 0 92px; display: grid; align-content: start; gap: 8px; max-height: 620px; overflow: auto; padding-right: 4px; }

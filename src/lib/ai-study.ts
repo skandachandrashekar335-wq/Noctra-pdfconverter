@@ -10,7 +10,10 @@ export type StudyTask =
   | "key-points"
   | "flashcards"
   | "quiz"
-  | "explain";
+  | "explain"
+  | "practice-test"
+  | "revision-plan"
+  | "weak-topics";
 
 export interface StudyPassage {
   pageNumber: number;
@@ -50,7 +53,17 @@ export function validateStudyRequest(input: unknown): StudyRequest {
     throw new StudyInputError("A documentKey is required for grounded study requests.");
   }
   const task = value.task;
-  if (task !== "summary" && task !== "key-points" && task !== "flashcards" && task !== "quiz" && task !== "explain") {
+  const validTasks: StudyTask[] = [
+    "summary",
+    "key-points",
+    "flashcards",
+    "quiz",
+    "explain",
+    "practice-test",
+    "revision-plan",
+    "weak-topics",
+  ];
+  if (!validTasks.includes(task as StudyTask)) {
     throw new StudyInputError("The study task is invalid.");
   }
   if (!Array.isArray(value.passages) || value.passages.length === 0 || value.passages.length > 50) {
@@ -68,7 +81,7 @@ export function validateStudyRequest(input: unknown): StudyRequest {
   if (total > 100_000) throw new StudyInputError("The study request is too large. Select a smaller section.");
   return {
     documentKey: value.documentKey,
-    task,
+    task: task as StudyTask,
     passages,
     ...(typeof value.question === "string" && value.question.length <= 2000 ? { question: value.question } : {}),
   };
@@ -83,8 +96,69 @@ function taskInstruction(task: StudyTask): string {
     case "summary": return "Write a concise, faithful summary.";
     case "key-points": return "Extract the most important key points as a numbered list.";
     case "flashcards": return "Create study flashcards in Q: / A: pairs.";
-    case "quiz": return "Create practice questions with answers, using only the supplied passages.";
+    case "quiz": return "Create practice multiple-choice questions with answers, using only the supplied passages.";
     case "explain": return "Explain the supplied material clearly for a student, preserving formulas and code exactly where relevant.";
+    case "practice-test": return "Create a practice test with multiple-choice, short answer questions, and an answer key with explanations.";
+    case "revision-plan": return "Generate a structured spaced-repetition revision plan with priorities and study checkpoints.";
+    case "weak-topics": return "Analyze user answers against the source text to identify conceptual gaps, weak topics, and areas needing review.";
+  }
+}
+
+class GeminiStudyProvider implements StudyProvider {
+  private readonly apiKey: string;
+  private readonly model: string;
+
+  constructor(apiKey: string, model = "gemini-2.5-flash") {
+    this.apiKey = apiKey;
+    this.model = model;
+  }
+
+  async generate(request: StudyRequest): Promise<StudyResult> {
+    const sourcePages = [...new Set(request.passages.map((passage) => passage.pageNumber))].sort((a, b) => a - b);
+    const source = request.passages.map((passage) => `[Page ${passage.pageNumber}]\n${passage.text}`).join("\n\n");
+    const prompt = [
+      taskInstruction(request.task),
+      "Use only the source passages below. Do not invent facts or citations.",
+      request.question ? `User question: ${request.question}` : "",
+      source,
+      `Source pages available: ${sourcePages.join(", ")}.`,
+    ].filter(Boolean).join("\n\n");
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 8192,
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`The study provider returned status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (typeof text !== "string" || text.trim().length === 0) {
+        throw new Error("The study provider returned an empty response.");
+      }
+
+      return {
+        answer: text.trim().slice(0, 30_000),
+        sourcePages,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -123,13 +197,22 @@ class OpenAICompatibleStudyProvider implements StudyProvider {
 }
 
 export function createStudyProvider(env: Record<string, string | undefined> = process.env): StudyProvider | null {
+  const geminiKey = env.GEMINI_API_KEY?.trim();
+  if (geminiKey) {
+    return new GeminiStudyProvider(geminiKey, env.GEMINI_MODEL?.trim() || "gemini-2.5-flash");
+  }
+
   const baseUrl = env.NOCTRA_AI_BASE_URL?.trim();
   const apiKey = env.NOCTRA_AI_API_KEY?.trim();
   const model = env.NOCTRA_AI_MODEL?.trim();
-  if (!baseUrl || !apiKey || !model) return null;
-  return new OpenAICompatibleStudyProvider(baseUrl, apiKey, model);
+  if (baseUrl && apiKey && model) {
+    return new OpenAICompatibleStudyProvider(baseUrl, apiKey, model);
+  }
+
+  return null;
 }
 
 export function studyConfigMessage(): string {
   return "The study assistant is not configured on this deployment. No document text was sent anywhere.";
 }
+

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { verifyIdToken } from "@/lib/firebase-admin";
+import { verifyUnifiedToken } from "@/lib/server/auth-resolver";
 import { authenticateRequest } from "@/lib/server/history-handlers";
 import {
   createStudyProvider,
@@ -9,39 +9,78 @@ import {
   studyConfigMessage,
   validateStudyRequest,
 } from "@/lib/ai-study";
-
-const requests = new Map<string, number[]>();
-const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 10;
-
-function limited(uid: string): boolean {
-  const now = Date.now();
-  const recent = (requests.get(uid) ?? []).filter((time) => now - time < WINDOW_MS);
-  if (recent.length >= MAX_REQUESTS) {
-    requests.set(uid, recent);
-    return true;
-  }
-  recent.push(now);
-  requests.set(uid, recent);
-  return false;
-}
+import {
+  checkRateLimit,
+  applyRateLimitHeaders,
+  rateLimitExceededResponse,
+} from "@/lib/server/rate-limiter";
 
 export async function POST(request: NextRequest) {
-  const auth = await authenticateRequest(request, { verifyToken: verifyIdToken });
+  const auth = await authenticateRequest(request, { verifyToken: verifyUnifiedToken });
   if (auth instanceof NextResponse) return auth;
-  if (limited(auth.uid)) return NextResponse.json({ error: "Study assistant rate limit reached. Try again shortly.", code: "study/rate-limited" }, { status: 429 });
+
+  // Enforce server-side rate limiting per user UID
+  const rateLimit = await checkRateLimit(`study:${auth.uid}`, {
+    limit: 20,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.success) {
+    return rateLimitExceededResponse(rateLimit);
+  }
+
   let body: Record<string, unknown>;
-  try { body = (await request.json()) as Record<string, unknown>; } catch { return NextResponse.json({ error: "Request body must be valid JSON.", code: "request/invalid" }, { status: 400 }); }
-  if (body.consent !== true) return NextResponse.json({ error: "Explicit consent is required before document text is sent to the configured study provider.", code: "study/consent-required" }, { status: 400 });
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    const res = NextResponse.json(
+      { error: "Request body must be valid JSON.", code: "request/invalid" },
+      { status: 400 }
+    );
+    return applyRateLimitHeaders(res, rateLimit);
+  }
+
+  if (body.consent !== true) {
+    const res = NextResponse.json(
+      {
+        error: "Explicit consent is required before document text is sent to the configured study provider.",
+        code: "study/consent-required",
+      },
+      { status: 400 }
+    );
+    return applyRateLimitHeaders(res, rateLimit);
+  }
+
   try {
     const input = validateStudyRequest(body);
     const provider = createStudyProvider();
     if (!provider) throw new StudyProviderUnavailableError();
-    return NextResponse.json(await provider.generate(input));
+    const result = await provider.generate(input);
+    const res = NextResponse.json(result);
+    return applyRateLimitHeaders(res, rateLimit);
   } catch (error) {
-    if (error instanceof StudyInputError) return NextResponse.json({ error: error.message, code: "request/invalid" }, { status: 400 });
-    if (error instanceof StudyProviderUnavailableError) return NextResponse.json({ error: studyConfigMessage(), code: "study/not-configured" }, { status: 503 });
+    if (error instanceof StudyInputError) {
+      const res = NextResponse.json(
+        { error: error.message, code: "request/invalid" },
+        { status: 400 }
+      );
+      return applyRateLimitHeaders(res, rateLimit);
+    }
+    if (error instanceof StudyProviderUnavailableError) {
+      const res = NextResponse.json(
+        { error: studyConfigMessage(), code: "study/not-configured" },
+        { status: 503 }
+      );
+      return applyRateLimitHeaders(res, rateLimit);
+    }
     console.error("Noctra study provider failure", { code: "study/provider-error" });
-    return NextResponse.json({ error: "The study provider could not complete this request.", code: "study/provider-error" }, { status: 502 });
+    const res = NextResponse.json(
+      {
+        error: "The study provider could not complete this request.",
+        code: "study/provider-error",
+      },
+      { status: 502 }
+    );
+    return applyRateLimitHeaders(res, rateLimit);
   }
 }
+

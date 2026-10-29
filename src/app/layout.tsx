@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 /**
  * No-flash theme bootstrap. Runs synchronously before first paint so the
@@ -101,7 +102,10 @@ export default function RootLayout({
         {/* Set data-theme before the first paint (see themeBootstrap above). */}
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            {children}
+            <ServiceWorkerRegister />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

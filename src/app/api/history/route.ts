@@ -11,7 +11,7 @@
 // edge-compatible dependency, so no config is needed.
 
 import type { NextRequest } from "next/server";
-import { verifyIdToken } from "@/lib/firebase-admin";
+import { verifyUnifiedToken } from "@/lib/server/auth-resolver";
 import {
   createConversion,
   listConversions,
@@ -21,19 +21,45 @@ import {
   handleList,
   type HistoryHandlers,
 } from "@/lib/server/history-handlers";
+import {
+  checkRateLimit,
+  applyRateLimitHeaders,
+  rateLimitExceededResponse,
+} from "@/lib/server/rate-limiter";
 
 const handlers: HistoryHandlers = {
-  verifyToken: verifyIdToken,
+  verifyToken: verifyUnifiedToken,
   list: listConversions,
   create: createConversion,
   // Not reachable from this route; required to satisfy the shared contract.
   update: async () => null,
 };
 
+function getClientIdentifier(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+  return "anonymous";
+}
+
 export async function GET(request: NextRequest) {
-  return handleList(request, handlers);
+  const clientKey = `history:${getClientIdentifier(request)}`;
+  const rateLimit = await checkRateLimit(clientKey, { limit: 120, windowSeconds: 60 });
+  if (!rateLimit.success) {
+    return rateLimitExceededResponse(rateLimit);
+  }
+  const response = await handleList(request, handlers);
+  return applyRateLimitHeaders(response, rateLimit);
 }
 
 export async function POST(request: NextRequest) {
-  return handleCreate(request, handlers);
+  const clientKey = `history:${getClientIdentifier(request)}`;
+  const rateLimit = await checkRateLimit(clientKey, { limit: 60, windowSeconds: 60 });
+  if (!rateLimit.success) {
+    return rateLimitExceededResponse(rateLimit);
+  }
+  const response = await handleCreate(request, handlers);
+  return applyRateLimitHeaders(response, rateLimit);
 }
+

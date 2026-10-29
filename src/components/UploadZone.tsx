@@ -9,6 +9,7 @@ import {
   MAX_FILE_SIZE_BYTES,
 } from "@/lib/conversion";
 import { PDFReader } from "@/components/PDFReader";
+import { ComparisonSlider } from "@/components/ComparisonSlider";
 import { revokeObjectUrl } from "@/lib/temp-resources";
 import {
   CONVERSION_PROFILES,
@@ -669,11 +670,11 @@ export function UploadZone({
           {state.diagnostics && (
             <DiagnosticsDisclosure json={state.diagnostics} />
           )}
-          {state.originalUrl && (
-            <div className="preview-comparison" aria-label="Before and after PDF preview">
-              <figure className="preview-pane"><figcaption>Bright original</figcaption><iframe src={state.originalUrl} title="Original PDF preview" /></figure>
-              <figure className="preview-pane"><figcaption>Dark transformed</figcaption><iframe src={state.outputUrl} title="Converted PDF preview" /></figure>
-            </div>
+          {state.originalUrl && state.outputUrl && (
+            <ComparisonSlider
+              originalUrl={state.originalUrl}
+              outputUrl={state.outputUrl}
+            />
           )}
           {readerOpen && state.fileName && (
             <PDFReader

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { getLandingCtaMode } from "@/lib/landing-cta";
 import {
   CONVERSION_PROFILES,
@@ -116,6 +117,9 @@ const FOOTER_NAV = [
 
 const FOOTER_PRODUCT = [
   { href: "#features", label: "Supported formats" },
+  { href: "/privacy", label: "Privacy Policy" },
+  { href: "/terms", label: "Terms of Service" },
+  { href: "/auth/login", label: "Sign in / Register" },
 ];
 
 /* Concise FAQ — every answer reflects what the code actually does. */
@@ -354,6 +358,7 @@ export default function LandingPage() {
 
   return (
     <div className="landing" ref={rootRef}>
+      <OnboardingModal />
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -1118,6 +1123,11 @@ export default function LandingPage() {
           {/* The year is read in an effect — `new Date()` at render time is an
               unstable value that blocks static prerendering. */}
           <p>© {copyrightYear} Noctra. Documents stay on your device.</p>
+          <div className="footer-legal">
+            <Link href="/privacy">Privacy Policy</Link>
+            <span aria-hidden="true">•</span>
+            <Link href="/terms">Terms of Service</Link>
+          </div>
         </div>
       </footer>
 
@@ -2345,10 +2355,31 @@ export default function LandingPage() {
           margin-top: clamp(40px, 6vw, 68px);
           padding-top: 24px;
           border-top: 1px solid var(--landing-border);
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
         }
         .footer-base p {
           font-size: 0.8125rem;
           color: var(--ink-50);
+          margin: 0;
+        }
+        .footer-legal {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-size: 0.8125rem;
+          color: var(--ink-50);
+        }
+        .footer-legal :global(a) {
+          color: var(--ink-50);
+          text-decoration: none;
+          transition: color 0.15s ease;
+        }
+        .footer-legal :global(a:hover) {
+          color: var(--text-primary);
         }
 
         @media (min-width: 760px) {

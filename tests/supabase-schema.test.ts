@@ -152,6 +152,14 @@ describe("conversions schema", () => {
     const cancelled = read("supabase/migrations/0004_add_cancelled_status.sql");
     assert.match(cancelled, /'cancelled'/);
   });
+
+  test("platform upgrade migration exists for Supabase auth, rate limiting and account deletion", () => {
+    const platform = read("supabase/migrations/0005_supabase_auth_and_platform.sql");
+    assert.match(platform, /user_identities/);
+    assert.match(platform, /api_rate_limits/);
+    assert.match(platform, /delete_user_data/);
+    assert.match(platform, /enable\s+row\s+level\s+security/i);
+  });
 });
 
 describe("no Supabase credentials in the browser", () => {

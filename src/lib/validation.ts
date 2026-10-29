@@ -76,3 +76,66 @@ export function detectFileType(file: FileLike): "pdf" | "docx" | "pptx" {
   if (ext === "pptx") return "pptx";
   return "pdf";
 }
+
+/** Form and user input validation result */
+export interface ValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+/**
+ * Validates an email address client- and server-side.
+ */
+export function validateEmail(email: unknown): ValidationResult {
+  if (typeof email !== "string" || email.trim().length === 0) {
+    return { valid: false, error: "Email address is required." };
+  }
+  const trimmed = email.trim();
+  if (trimmed.length > 254) {
+    return { valid: false, error: "Email address is too long." };
+  }
+  const emailRegex =
+    /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, error: "Please enter a valid email address." };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validates a password for signup / reset.
+ */
+export function validatePassword(password: unknown): ValidationResult {
+  if (typeof password !== "string" || password.length === 0) {
+    return { valid: false, error: "Password is required." };
+  }
+  if (password.length < 8) {
+    return { valid: false, error: "Password must be at least 8 characters long." };
+  }
+  if (password.length > 128) {
+    return { valid: false, error: "Password cannot exceed 128 characters." };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validates user-entered text labels or tags.
+ */
+export function validateSafeText(
+  text: unknown,
+  options: { minLength?: number; maxLength?: number } = {}
+): ValidationResult {
+  const { minLength = 1, maxLength = 255 } = options;
+  if (typeof text !== "string") {
+    return { valid: false, error: "Text value is required." };
+  }
+  const trimmed = text.trim();
+  if (trimmed.length < minLength) {
+    return { valid: false, error: `Must be at least ${minLength} character(s).` };
+  }
+  if (trimmed.length > maxLength) {
+    return { valid: false, error: `Must not exceed ${maxLength} characters.` };
+  }
+  return { valid: true };
+}
+

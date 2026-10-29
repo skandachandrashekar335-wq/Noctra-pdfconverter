@@ -4,6 +4,9 @@ import {
   validateFile,
   detectFileType,
   MAX_FILE_SIZE_BYTES,
+  validateEmail,
+  validatePassword,
+  validateSafeText,
 } from "../src/lib/validation.ts";
 
 describe("validateFile", () => {
@@ -118,5 +121,64 @@ describe("detectFileType", () => {
       detectFileType({ name: "deck.pptx", type: "application/pdf", size: 1 }),
       "pptx"
     );
+  });
+});
+
+describe("form and input validation", () => {
+  describe("validateEmail", () => {
+    test("accepts valid email addresses", () => {
+      assert.deepEqual(validateEmail("user@example.com"), { valid: true });
+      assert.deepEqual(validateEmail("first.last@domain.co.uk"), { valid: true });
+      assert.deepEqual(validateEmail("student+tag@university.edu"), { valid: true });
+    });
+
+    test("rejects empty or non-string email", () => {
+      assert.equal(validateEmail("").valid, false);
+      assert.equal(validateEmail("   ").valid, false);
+      assert.equal(validateEmail(null).valid, false);
+      assert.equal(validateEmail(undefined).valid, false);
+    });
+
+    test("rejects malformed email formats", () => {
+      assert.equal(validateEmail("plainaddress").valid, false);
+      assert.equal(validateEmail("@missinguser.com").valid, false);
+      assert.equal(validateEmail("missingdomain@").valid, false);
+      assert.equal(validateEmail("user@domain..com").valid, false);
+    });
+
+    test("rejects excessively long email addresses", () => {
+      const longEmail = `${"a".repeat(250)}@example.com`;
+      assert.equal(validateEmail(longEmail).valid, false);
+    });
+  });
+
+  describe("validatePassword", () => {
+    test("accepts passwords of 8 or more characters", () => {
+      assert.deepEqual(validatePassword("password123"), { valid: true });
+      assert.deepEqual(validatePassword("correct-horse-battery-staple"), { valid: true });
+    });
+
+    test("rejects passwords under 8 characters", () => {
+      assert.equal(validatePassword("1234567").valid, false);
+      assert.equal(validatePassword("short").valid, false);
+    });
+
+    test("rejects empty or non-string passwords", () => {
+      assert.equal(validatePassword("").valid, false);
+      assert.equal(validatePassword(null).valid, false);
+    });
+
+    test("rejects passwords exceeding 128 characters", () => {
+      const longPass = "x".repeat(129);
+      assert.equal(validatePassword(longPass).valid, false);
+    });
+  });
+
+  describe("validateSafeText", () => {
+    test("validates text length constraints", () => {
+      assert.deepEqual(validateSafeText("Valid Label", { minLength: 1, maxLength: 50 }), { valid: true });
+      assert.equal(validateSafeText("", { minLength: 1 }).valid, false);
+      assert.equal(validateSafeText("Too long string", { maxLength: 5 }).valid, false);
+    });
   });
 });
