@@ -610,6 +610,9 @@ export function cleanKey(val?: string | null): string | undefined {
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     trimmed = trimmed.slice(1, -1).trim();
   }
+  if (trimmed.startsWith("Bearer ")) {
+    trimmed = trimmed.slice(7).trim();
+  }
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
@@ -622,7 +625,7 @@ export function createFallbackEngine(
   customGeminiKey?: string,
   customOpenRouterKey?: string
 ): MultiProviderFallbackEngine {
-  const geminiPrimaryApiKey =
+  let geminiPrimaryApiKey =
     cleanKey(customGeminiKey) ||
     cleanKey(env.GEMINI_API_KEY) ||
     cleanKey(env.GOOGLE_GEMINI_API_KEY) ||
@@ -630,6 +633,21 @@ export function createFallbackEngine(
     cleanKey(env.GOOGLE_API_KEY) ||
     cleanKey(env.NEXT_PUBLIC_GEMINI_API_KEY);
   const geminiPrimaryModel = env.GEMINI_PRIMARY_MODEL?.trim() || env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+
+  let openRouterApiKey =
+    cleanKey(customOpenRouterKey) ||
+    cleanKey(env.OPENROUTER_API_KEY) ||
+    cleanKey(env.OPEN_ROUTER_API_KEY) ||
+    cleanKey(env.NOCTRA_AI_API_KEY);
+  const openRouterModel = env.OPENROUTER_MODEL?.trim() || "nvidia/nemotron-3.5-lightning:free";
+
+  // Auto-detect swapped keys: if an OpenRouter key (sk-or-...) was configured as Gemini key
+  if (geminiPrimaryApiKey && (geminiPrimaryApiKey.startsWith("sk-or-") || geminiPrimaryApiKey.startsWith("sk-"))) {
+    if (!openRouterApiKey) {
+      openRouterApiKey = geminiPrimaryApiKey;
+    }
+    geminiPrimaryApiKey = undefined;
+  }
 
   const geminiSecondaryCustomKey =
     cleanKey(env.GEMINI_SECONDARY_API_KEY) ||
@@ -641,13 +659,6 @@ export function createFallbackEngine(
     (!geminiSecondaryCustomKey || geminiSecondaryCustomKey === geminiPrimaryApiKey)
   );
   const geminiSecondaryModel = env.GEMINI_SECONDARY_MODEL?.trim() || "gemini-flash-lite-latest";
-
-  const openRouterApiKey =
-    cleanKey(customOpenRouterKey) ||
-    cleanKey(env.OPENROUTER_API_KEY) ||
-    cleanKey(env.OPEN_ROUTER_API_KEY) ||
-    cleanKey(env.NOCTRA_AI_API_KEY);
-  const openRouterModel = env.OPENROUTER_MODEL?.trim() || "nvidia/nemotron-3.5-lightning:free";
 
   const adapters: AIProviderAdapter[] = [
     new GeminiProviderAdapter({
