@@ -604,21 +604,36 @@ export class MultiProviderFallbackEngine {
 // FACTORY
 // ─────────────────────────────────────────────────────────────────────────────
 
+export function cleanKey(val?: string | null): string | undefined {
+  if (!val) return undefined;
+  let trimmed = val.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 /**
- * Creates the production 3-level fallback engine using server environment variables.
+ * Creates the production 3-level fallback engine using server environment variables
+ * and optional client-provided key overrides (Bring-Your-Own-Key).
  */
-export function createFallbackEngine(env: Record<string, string | undefined> = process.env): MultiProviderFallbackEngine {
+export function createFallbackEngine(
+  env: Record<string, string | undefined> = process.env,
+  customGeminiKey?: string,
+  customOpenRouterKey?: string
+): MultiProviderFallbackEngine {
   const geminiPrimaryApiKey =
-    env.GEMINI_API_KEY?.trim() ||
-    env.GOOGLE_GEMINI_API_KEY?.trim() ||
-    env.GOOGLE_AI_API_KEY?.trim() ||
-    env.GOOGLE_API_KEY?.trim() ||
-    env.NEXT_PUBLIC_GEMINI_API_KEY?.trim();
+    cleanKey(customGeminiKey) ||
+    cleanKey(env.GEMINI_API_KEY) ||
+    cleanKey(env.GOOGLE_GEMINI_API_KEY) ||
+    cleanKey(env.GOOGLE_AI_API_KEY) ||
+    cleanKey(env.GOOGLE_API_KEY) ||
+    cleanKey(env.NEXT_PUBLIC_GEMINI_API_KEY);
   const geminiPrimaryModel = env.GEMINI_PRIMARY_MODEL?.trim() || env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
 
   const geminiSecondaryCustomKey =
-    env.GEMINI_SECONDARY_API_KEY?.trim() ||
-    env.GEMINI_BACKUP_API_KEY?.trim();
+    cleanKey(env.GEMINI_SECONDARY_API_KEY) ||
+    cleanKey(env.GEMINI_BACKUP_API_KEY);
   const geminiSecondaryApiKey = geminiSecondaryCustomKey || geminiPrimaryApiKey;
   const isSecondarySharedKey = Boolean(
     geminiPrimaryApiKey &&
@@ -628,9 +643,10 @@ export function createFallbackEngine(env: Record<string, string | undefined> = p
   const geminiSecondaryModel = env.GEMINI_SECONDARY_MODEL?.trim() || "gemini-flash-lite-latest";
 
   const openRouterApiKey =
-    env.OPENROUTER_API_KEY?.trim() ||
-    env.OPEN_ROUTER_API_KEY?.trim() ||
-    env.NOCTRA_AI_API_KEY?.trim();
+    cleanKey(customOpenRouterKey) ||
+    cleanKey(env.OPENROUTER_API_KEY) ||
+    cleanKey(env.OPEN_ROUTER_API_KEY) ||
+    cleanKey(env.NOCTRA_AI_API_KEY);
   const openRouterModel = env.OPENROUTER_MODEL?.trim() || "nvidia/nemotron-3.5-lightning:free";
 
   const adapters: AIProviderAdapter[] = [

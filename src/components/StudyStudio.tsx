@@ -138,6 +138,7 @@ export function StudyStudio() {
 
   // Shared status/error notification
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [directKeyInput, setDirectKeyInput] = useState<string>("");
 
   // Multi-Provider Fallback Engine Result Tracking
   const [activeProviderResult, setActiveProviderResult] = useState<{
@@ -271,6 +272,11 @@ export function StudyStudio() {
     const token = user ? await user.getIdToken() : null;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const clientKey = typeof window !== "undefined" ? localStorage.getItem("noctra_custom_gemini_key") : null;
+    if (clientKey && clientKey.trim()) {
+      headers["x-gemini-api-key"] = clientKey.trim();
+    }
 
     const payload = {
       documentKey: syntheticKey,
@@ -698,9 +704,54 @@ export function StudyStudio() {
       </div>
 
       {statusMessage && (
-        <div role="alert" className="study-global-error">
-          <span>{statusMessage}</span>
-          <button type="button" onClick={() => setStatusMessage(null)} className="error-close-btn">✕</button>
+        <div role="alert" className="study-global-error" style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "stretch" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+            <span>{statusMessage}</span>
+            <button type="button" onClick={() => setStatusMessage(null)} className="error-close-btn" aria-label="Dismiss message">✕</button>
+          </div>
+          {statusMessage.toLowerCase().includes("gemini_api_key") && (
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", paddingTop: "4px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+              <input
+                type="password"
+                placeholder="Or paste Gemini API key directly (AQ... / AIza...)"
+                value={directKeyInput}
+                onChange={(e) => setDirectKeyInput(e.target.value)}
+                style={{
+                  flex: "1 1 260px",
+                  background: "rgba(0,0,0,0.6)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  borderRadius: "6px",
+                  padding: "7px 12px",
+                  color: "#fff",
+                  fontSize: "13px",
+                  outline: "none"
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const cleaned = directKeyInput.trim().replace(/^["']|["']$/g, "").trim();
+                  if (cleaned) {
+                    localStorage.setItem("noctra_custom_gemini_key", cleaned);
+                    setStatusMessage(null);
+                    setDirectKeyInput("");
+                  }
+                }}
+                style={{
+                  background: "var(--accent-purple, #a855f7)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "7px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                Save &amp; Connect Key
+              </button>
+            </div>
+          )}
         </div>
       )}
 

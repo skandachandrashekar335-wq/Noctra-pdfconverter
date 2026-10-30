@@ -19,8 +19,10 @@ import {
   rateLimitExceededResponse,
 } from "@/lib/server/rate-limiter";
 
-export async function GET() {
-  const engine = createFallbackEngine();
+export async function GET(request: NextRequest) {
+  const customGeminiKey = request.headers.get("x-gemini-api-key") ?? undefined;
+  const customOpenRouterKey = request.headers.get("x-openrouter-api-key") ?? undefined;
+  const engine = createFallbackEngine(process.env, customGeminiKey, customOpenRouterKey);
   return NextResponse.json({
     providers: engine.getProviderStatuses(),
   });
@@ -75,7 +77,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const input = validateStudyRequest(body);
-    const engine = createFallbackEngine();
+    const customGeminiKey =
+      (typeof body.customGeminiKey === "string" ? body.customGeminiKey : undefined) ||
+      (request.headers.get("x-gemini-api-key") ?? undefined);
+    const customOpenRouterKey =
+      (typeof body.customOpenRouterKey === "string" ? body.customOpenRouterKey : undefined) ||
+      (request.headers.get("x-openrouter-api-key") ?? undefined);
+
+    const engine = createFallbackEngine(process.env, customGeminiKey, customOpenRouterKey);
     const result = await engine.generate(input);
     const res = NextResponse.json(result);
     return applyRateLimitHeaders(res, rateLimit);

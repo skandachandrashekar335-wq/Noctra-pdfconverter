@@ -33,19 +33,34 @@ function DashboardContent() {
     model: string;
     configured: boolean;
   }>>([]);
+  const [customKeySaved, setCustomKeySaved] = useState(false);
+  const [customKeyInput, setCustomKeyInput] = useState("");
+
+  const refreshProviderStatuses = useCallback(() => {
+    const headers: Record<string, string> = {};
+    const local = typeof window !== "undefined" ? localStorage.getItem("noctra_custom_gemini_key") : null;
+    if (local && local.trim()) {
+      headers["x-gemini-api-key"] = local.trim();
+      setCustomKeySaved(true);
+    } else {
+      setCustomKeySaved(false);
+    }
+
+    fetch("/api/study", { headers })
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.providers)) {
+          setProviderStatuses(data.providers);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (activeTab === "settings") {
-      fetch("/api/study")
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data?.providers)) {
-            setProviderStatuses(data.providers);
-          }
-        })
-        .catch(() => {});
+      refreshProviderStatuses();
     }
-  }, [activeTab]);
+  }, [activeTab, refreshProviderStatuses]);
   // Bumped whenever a conversion settles so the history list refetches.
   // The list may still be mid-write at that instant, hence the short delay.
   const [historyRefresh, setHistoryRefresh] = useState(0);
@@ -444,6 +459,62 @@ function DashboardContent() {
                   <p className="dash-provider-privacy-note">
                     🔒 Zero credential leakage: API keys reside strictly on the server and are never delivered to the browser. Requests are executed sequentially, never concurrently.
                   </p>
+
+                  <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid var(--border-subtle, rgba(255,255,255,0.08))" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                        Client Gemini Key Override (Optional)
+                      </span>
+                      <span style={{ fontSize: "12px", color: customKeySaved ? "var(--accent-purple, #a855f7)" : "var(--text-muted)" }}>
+                        {customKeySaved ? "● Personal key active in browser" : "○ Not set"}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <input
+                        type="password"
+                        placeholder="Paste Gemini API key (AQ... / AIza...)"
+                        value={customKeyInput}
+                        onChange={(e) => setCustomKeyInput(e.target.value)}
+                        style={{
+                          flex: "1 1 240px",
+                          background: "var(--bg-base, #111)",
+                          border: "1px solid var(--border-subtle, rgba(255,255,255,0.15))",
+                          borderRadius: "6px",
+                          padding: "7px 12px",
+                          color: "var(--text-primary, #fff)",
+                          fontSize: "13px"
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cleaned = customKeyInput.trim().replace(/^["']|["']$/g, "").trim();
+                          if (cleaned) {
+                            localStorage.setItem("noctra_custom_gemini_key", cleaned);
+                            setCustomKeyInput("");
+                            refreshProviderStatuses();
+                          }
+                        }}
+                        className="dash-settings-btn"
+                        style={{ padding: "7px 14px", fontSize: "13px" }}
+                      >
+                        Save Key
+                      </button>
+                      {customKeySaved && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            localStorage.removeItem("noctra_custom_gemini_key");
+                            refreshProviderStatuses();
+                          }}
+                          className="dash-settings-btn is-danger"
+                          style={{ padding: "7px 14px", fontSize: "13px" }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="dash-settings-card dash-settings-danger">
