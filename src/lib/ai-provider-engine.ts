@@ -589,7 +589,7 @@ export class MultiProviderFallbackEngine {
     // All available providers were tried and failed
     if (attemptedProviders.length === 0) {
       throw new StudyProviderUnavailableError(
-        "No AI study providers are configured on this deployment. Please configure GEMINI_API_KEY or OPENROUTER_API_KEY."
+        "No AI study providers are configured on this deployment. Please add GEMINI_API_KEY or OPENROUTER_API_KEY in Vercel Project Settings (Settings → Environment Variables) and redeploy."
       );
     }
 
@@ -608,10 +608,17 @@ export class MultiProviderFallbackEngine {
  * Creates the production 3-level fallback engine using server environment variables.
  */
 export function createFallbackEngine(env: Record<string, string | undefined> = process.env): MultiProviderFallbackEngine {
-  const geminiPrimaryApiKey = env.GEMINI_API_KEY?.trim();
+  const geminiPrimaryApiKey =
+    env.GEMINI_API_KEY?.trim() ||
+    env.GOOGLE_GEMINI_API_KEY?.trim() ||
+    env.GOOGLE_AI_API_KEY?.trim() ||
+    env.GOOGLE_API_KEY?.trim() ||
+    env.NEXT_PUBLIC_GEMINI_API_KEY?.trim();
   const geminiPrimaryModel = env.GEMINI_PRIMARY_MODEL?.trim() || env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
 
-  const geminiSecondaryCustomKey = env.GEMINI_SECONDARY_API_KEY?.trim();
+  const geminiSecondaryCustomKey =
+    env.GEMINI_SECONDARY_API_KEY?.trim() ||
+    env.GEMINI_BACKUP_API_KEY?.trim();
   const geminiSecondaryApiKey = geminiSecondaryCustomKey || geminiPrimaryApiKey;
   const isSecondarySharedKey = Boolean(
     geminiPrimaryApiKey &&
@@ -620,7 +627,10 @@ export function createFallbackEngine(env: Record<string, string | undefined> = p
   );
   const geminiSecondaryModel = env.GEMINI_SECONDARY_MODEL?.trim() || "gemini-flash-lite-latest";
 
-  const openRouterApiKey = env.OPENROUTER_API_KEY?.trim();
+  const openRouterApiKey =
+    env.OPENROUTER_API_KEY?.trim() ||
+    env.OPEN_ROUTER_API_KEY?.trim() ||
+    env.NOCTRA_AI_API_KEY?.trim();
   const openRouterModel = env.OPENROUTER_MODEL?.trim() || "nvidia/nemotron-3.5-lightning:free";
 
   const adapters: AIProviderAdapter[] = [
