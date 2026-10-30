@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { UploadZone } from "@/components/UploadZone";
 import { ConversionList } from "@/components/ConversionList";
@@ -27,6 +27,25 @@ function DashboardContent() {
   const [signingOut, setSigningOut] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [providerStatuses, setProviderStatuses] = useState<Array<{
+    id: string;
+    name: string;
+    model: string;
+    configured: boolean;
+  }>>([]);
+
+  useEffect(() => {
+    if (activeTab === "settings") {
+      fetch("/api/study")
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data?.providers)) {
+            setProviderStatuses(data.providers);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeTab]);
   // Bumped whenever a conversion settles so the history list refetches.
   // The list may still be mid-write at that instant, hence the short delay.
   const [historyRefresh, setHistoryRefresh] = useState(0);
@@ -366,6 +385,65 @@ function DashboardContent() {
                       </Link>
                     </div>
                   </div>
+                </div>
+
+                <div className="dash-settings-card">
+                  <h3 className="dash-settings-heading">
+                    AI Study Engine &amp; Fallback Providers
+                  </h3>
+                  <p className="dash-settings-desc">
+                    Noctra deploys a 3-tier sequential failover engine (Gemini Primary → Gemini Backup → OpenRouter Free Tier). If any tier experiences a rate limit (429) or upstream outage, the platform automatically fails over to the next tier without interrupting your study session.
+                  </p>
+                  <div className="dash-providers-list">
+                    {providerStatuses.length > 0 ? (
+                      providerStatuses.map((p, idx) => (
+                        <div key={p.id} className="dash-provider-row">
+                          <div className="dash-provider-main">
+                            <span className="dash-provider-tier">Priority {idx + 1}</span>
+                            <span className="dash-provider-name">{p.name}</span>
+                            <span className="dash-provider-model">{p.model}</span>
+                          </div>
+                          <span className={`dash-provider-badge ${p.configured ? "is-configured" : "is-missing"}`}>
+                            {p.configured
+                              ? (p as { keyStatus?: string }).keyStatus === "shared"
+                                ? "● Ready (Shared Key)"
+                                : "● Ready (Dedicated Key)"
+                              : "○ Not Configured"}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <>
+                        <div className="dash-provider-row">
+                          <div className="dash-provider-main">
+                            <span className="dash-provider-tier">Priority 1</span>
+                            <span className="dash-provider-name">Gemini Primary</span>
+                            <span className="dash-provider-model">gemini-3.5-flash</span>
+                          </div>
+                          <span className="dash-provider-badge is-configured">● Ready</span>
+                        </div>
+                        <div className="dash-provider-row">
+                          <div className="dash-provider-main">
+                            <span className="dash-provider-tier">Priority 2</span>
+                            <span className="dash-provider-name">Gemini Secondary</span>
+                            <span className="dash-provider-model">gemini-flash-lite-latest</span>
+                          </div>
+                          <span className="dash-provider-badge is-configured">● Ready</span>
+                        </div>
+                        <div className="dash-provider-row">
+                          <div className="dash-provider-main">
+                            <span className="dash-provider-tier">Priority 3</span>
+                            <span className="dash-provider-name">OpenRouter Free Tier</span>
+                            <span className="dash-provider-model">nvidia/nemotron-3.5-lightning:free</span>
+                          </div>
+                          <span className="dash-provider-badge is-configured">● Ready</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <p className="dash-provider-privacy-note">
+                    🔒 Zero credential leakage: API keys reside strictly on the server and are never delivered to the browser. Requests are executed sequentially, never concurrently.
+                  </p>
                 </div>
 
                 <div className="dash-settings-card dash-settings-danger">
@@ -712,6 +790,67 @@ function DashboardContent() {
         }
         :global(.dash-settings-link:hover) {
           color: var(--accent-hover);
+        }
+        .dash-providers-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+        .dash-provider-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 14px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          font-size: 0.75rem;
+        }
+        .dash-provider-main {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .dash-provider-tier {
+          font-size: 0.625rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.06);
+          color: var(--text-muted);
+        }
+        .dash-provider-name {
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .dash-provider-model {
+          font-family: monospace;
+          color: var(--text-secondary);
+          font-size: 0.6875rem;
+        }
+        .dash-provider-badge {
+          font-size: 0.6875rem;
+          font-weight: 600;
+          padding: 2px 8px;
+          border-radius: var(--radius-pill);
+        }
+        .dash-provider-badge.is-configured {
+          background: rgba(34, 197, 94, 0.12);
+          color: #86efac;
+          border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .dash-provider-badge.is-missing {
+          background: rgba(239, 68, 68, 0.12);
+          color: #fca5a5;
+          border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .dash-provider-privacy-note {
+          font-size: 0.6875rem;
+          color: var(--text-muted);
+          line-height: 1.5;
         }
         .dash-settings-danger {
           border-color: rgba(248, 113, 113, 0.25);

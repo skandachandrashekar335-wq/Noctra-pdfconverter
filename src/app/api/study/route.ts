@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { verifyUnifiedToken } from "@/lib/server/auth-resolver";
 import { authenticateRequest } from "@/lib/server/history-handlers";
 import {
-  createStudyProvider,
   StudyInputError,
   StudyProviderUnavailableError,
   StudyProviderError,
@@ -13,11 +12,19 @@ import {
   studyConfigMessage,
   validateStudyRequest,
 } from "@/lib/ai-study";
+import { createFallbackEngine } from "@/lib/ai-provider-engine";
 import {
   checkRateLimit,
   applyRateLimitHeaders,
   rateLimitExceededResponse,
 } from "@/lib/server/rate-limiter";
+
+export async function GET() {
+  const engine = createFallbackEngine();
+  return NextResponse.json({
+    providers: engine.getProviderStatuses(),
+  });
+}
 
 export async function POST(request: NextRequest) {
   let rateLimitKey: string;
@@ -68,9 +75,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const input = validateStudyRequest(body);
-    const provider = createStudyProvider();
-    if (!provider) throw new StudyProviderUnavailableError();
-    const result = await provider.generate(input);
+    const engine = createFallbackEngine();
+    const result = await engine.generate(input);
     const res = NextResponse.json(result);
     return applyRateLimitHeaders(res, rateLimit);
   } catch (error) {
