@@ -63,7 +63,7 @@ function DashboardContent() {
   const shownError = configError ?? error;
 
   return (
-    <div className="dash-shell theme-dark">
+    <>
       {/* ── Delete Account Confirmation Modal ────────────────────── */}
       {showDeleteModal && (
         <div
@@ -101,112 +101,108 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <aside className="dash-sidebar">
-        <Link href="/" className="dash-logo" aria-label="Noctra home">
-          <NoctraLogo />
-        </Link>
+      <div className="dash-shell theme-dark">
+        {/* ── Sidebar ─────────────────────────────────────────────── */}
+        <aside className="dash-sidebar">
+          <Link href="/" className="dash-logo" aria-label="Noctra home">
+            <NoctraLogo />
+          </Link>
 
-        <nav className="dash-nav" aria-label="Dashboard navigation">
-          <NavItem
-            icon={<UploadNavIcon />}
-            label="Convert"
-            active={activeTab === "convert"}
-            onClick={() => setActiveTab("convert")}
-          />
-          <NavItem
-            icon={<HistoryNavIcon />}
-            label="Library"
-            active={activeTab === "library"}
-            onClick={() => setActiveTab("library")}
-          />
-          <NavItem
-            icon={<StudyNavIcon />}
-            label="Study AI"
-            active={activeTab === "study"}
-            onClick={() => setActiveTab("study")}
-          />
-          <NavItem
-            icon={<SettingsNavIcon />}
-            label="Settings"
-            active={activeTab === "settings"}
-            onClick={() => setActiveTab("settings")}
-          />
-        </nav>
+          <nav className="dash-nav" aria-label="Dashboard navigation">
+            <NavItem
+              icon={<UploadNavIcon />}
+              label="Convert"
+              active={activeTab === "convert"}
+              onClick={() => setActiveTab("convert")}
+            />
+            <NavItem
+              icon={<HistoryNavIcon />}
+              label="Library"
+              active={activeTab === "library"}
+              onClick={() => setActiveTab("library")}
+            />
+            <NavItem
+              icon={<StudyNavIcon />}
+              label="Study AI"
+              active={activeTab === "study"}
+              onClick={() => setActiveTab("study")}
+            />
+            <NavItem
+              icon={<SettingsNavIcon />}
+              label="Settings"
+              active={activeTab === "settings"}
+              onClick={() => setActiveTab("settings")}
+            />
+          </nav>
 
-        <div className="dash-theme">
-          <span className="dash-theme-caption">Appearance</span>
-          <ThemeToggle />
-        </div>
-
-        <div className="dash-status-block" role="status" aria-live="polite">
-          <span className="dash-theme-caption">Engine Status</span>
-          <div className={`dash-status-pill ${isOffline ? "is-offline" : "is-online"}`}>
-            <span className="dash-status-dot" aria-hidden="true" />
-            <div className="dash-status-info">
-              <span className="dash-status-title">
-                {isOffline ? "Working Offline" : "Local Engine Active"}
-              </span>
-              <span className="dash-status-desc">
-                {isOffline ? "Local conversion & reader ready" : "Zero document uploads"}
-              </span>
+          <div className="dash-status-block" role="status" aria-live="polite">
+            <span className="dash-theme-caption">Engine Status</span>
+            <div className={`dash-status-pill ${isOffline ? "is-offline" : "is-online"}`}>
+              <span className="dash-status-dot" aria-hidden="true" />
+              <div className="dash-status-info">
+                <span className="dash-status-title">
+                  {isOffline ? "Working Offline" : "Local Engine Active"}
+                </span>
+                <span className="dash-status-desc">
+                  {isOffline ? "Local conversion & reader ready" : "Zero document uploads"}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="dash-profile">
-          {user?.photoURL ? (
-            <Image
-              src={user.photoURL}
-              alt={profile?.displayName ?? "User avatar"}
-              width={36}
-              height={36}
-              className="dash-avatar"
-            />
-          ) : (
-            <AvatarFallback name={profile?.displayName} />
-          )}
-          <div className="dash-profile-info">
-            <p className="dash-profile-name">
-              {profile?.displayName ?? "User"}
-            </p>
-            <p className="dash-profile-email">{profile?.email}</p>
-            <button
-              type="button"
-              onClick={() => setShowDeleteModal(true)}
-              className="dash-delete-link"
-            >
-              Delete account
-            </button>
+          <div className="dash-sidebar-bottom">
+            <div className="dash-theme">
+              <span className="dash-theme-caption">Appearance</span>
+              <ThemeToggle />
+            </div>
+
+            <div className="dash-profile">
+              {user?.photoURL ? (
+                <Image
+                  src={user.photoURL}
+                  alt={profile?.displayName ?? "User avatar"}
+                  width={36}
+                  height={36}
+                  className="dash-avatar"
+                />
+              ) : (
+                <AvatarFallback name={profile?.displayName} />
+              )}
+              <div className="dash-profile-info">
+                <p className="dash-profile-name">
+                  {profile?.displayName ?? "User"}
+                </p>
+                <p className="dash-profile-email">{profile?.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="dash-signout"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <SignOutIcon />
+              </button>
+            </div>
+
+            <div className="dash-sidebar-footer">
+              <Link href="/privacy" className="dash-footer-link">
+                Privacy
+              </Link>
+              <span className="dash-footer-dot">•</span>
+              <Link href="/terms" className="dash-footer-link">
+                Terms
+              </Link>
+            </div>
+
+            {shownError && (
+              <p role="alert" className="dash-auth-error">
+                {shownError}
+              </p>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="dash-signout"
-            aria-label="Sign out"
-            title="Sign out"
-          >
-            <SignOutIcon />
-          </button>
-        </div>
-
-        <div className="dash-sidebar-footer">
-          <Link href="/privacy" className="dash-footer-link">
-            Privacy
-          </Link>
-          <span className="dash-footer-dot">•</span>
-          <Link href="/terms" className="dash-footer-link">
-            Terms
-          </Link>
-        </div>
-
-        {shownError && (
-          <p role="alert" className="dash-auth-error">
-            {shownError}
-          </p>
-        )}
-      </aside>
+        </aside>
 
       {/* ── Mobile Tab Navigation (Fixed bottom bar on small viewports) ── */}
       <nav className="dash-mobile-nav" aria-label="Mobile navigation">
@@ -257,7 +253,7 @@ function DashboardContent() {
             <>
               <header className="dash-header">
                 <p className="dash-eyebrow">Workspace</p>
-                <h1 className="dash-title">Convert Document</h1>
+                <h1 className="dash-title">Convert document</h1>
                 <p className="dash-sub">
                   Upload a PDF, DOCX or PPTX to get a comfortable dark-mode version.
                 </p>
@@ -296,7 +292,7 @@ function DashboardContent() {
             <>
               <header className="dash-header">
                 <p className="dash-eyebrow">Smart Document Library</p>
-                <h1 className="dash-title">Your Converted Documents</h1>
+                <h1 className="dash-title">Your converted documents</h1>
                 <p className="dash-sub">
                   Search, filter, tag, favorite, and open your dark-mode study documents directly in the reader.
                 </p>
@@ -331,18 +327,18 @@ function DashboardContent() {
             <>
               <header className="dash-header">
                 <p className="dash-eyebrow">Preferences &amp; Privacy</p>
-                <h1 className="dash-title">Workspace Settings</h1>
+                <h1 className="dash-title">Workspace settings</h1>
                 <p className="dash-sub">
                   Manage application appearance, offline data isolation, and account preferences.
                 </p>
               </header>
 
-              <section className="grid gap-6 max-w-3xl" aria-label="Settings options">
-                <div className="p-6 sm:p-7 rounded-2xl bg-[#0f1115] border border-zinc-800/80">
-                  <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider mb-2">
-                    Interface Theme
+              <section className="dash-settings-grid" aria-label="Settings options">
+                <div className="dash-settings-card">
+                  <h3 className="dash-settings-heading">
+                    Interface theme
                   </h3>
-                  <p className="text-xs text-zinc-400 mb-5 leading-relaxed max-w-xl">
+                  <p className="dash-settings-desc">
                     Choose how Noctra looks across your devices. System mode matches your OS preference automatically.
                   </p>
                   <div className="settings-theme-wrapper">
@@ -350,41 +346,41 @@ function DashboardContent() {
                   </div>
                 </div>
 
-                <div className="p-6 sm:p-7 rounded-2xl bg-[#0f1115] border border-zinc-800/80">
-                  <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider mb-2">
-                    Security &amp; Document Privacy
+                <div className="dash-settings-card">
+                  <h3 className="dash-settings-heading">
+                    Security &amp; document privacy
                   </h3>
-                  <div className="space-y-4 text-xs text-zinc-300 leading-relaxed max-w-2xl">
+                  <div className="dash-settings-privacy-body">
                     <p>
-                      <strong className="text-zinc-100 font-semibold">Zero-Server Document Processing:</strong> In local-first mode, all PDF, DOCX, and PPTX conversions are performed in your browser&apos;s Web Worker memory. Your original document contents never leave your device unless you explicitly opt into the AI Study Assistant.
+                      <strong className="dash-settings-strong">Zero-Server Document Processing:</strong> In local-first mode, all PDF, DOCX, and PPTX conversions are performed in your browser&apos;s Web Worker memory. Your original document contents never leave your device unless you explicitly opt into the AI Study Assistant.
                     </p>
                     <p>
-                      <strong className="text-zinc-100 font-semibold">100% User Ownership:</strong> You retain complete, unrestricted copyright and ownership over all uploaded, converted, and exported documents.
+                      <strong className="dash-settings-strong">100% User Ownership:</strong> You retain complete, unrestricted copyright and ownership over all uploaded, converted, and exported documents.
                     </p>
-                    <div className="flex items-center gap-6 pt-2 text-xs">
-                      <Link href="/privacy" className="text-purple-400 hover:text-purple-300 transition-colors inline-flex items-center gap-1 font-medium">
+                    <div className="dash-settings-links">
+                      <Link href="/privacy" className="dash-settings-link">
                         Read Privacy Policy <span>→</span>
                       </Link>
-                      <Link href="/terms" className="text-purple-400 hover:text-purple-300 transition-colors inline-flex items-center gap-1 font-medium">
+                      <Link href="/terms" className="dash-settings-link">
                         Read Terms of Service <span>→</span>
                       </Link>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-6 sm:p-7 rounded-2xl bg-[#140b0d] border border-red-900/40">
-                  <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">
-                    Danger Zone
+                <div className="dash-settings-card dash-settings-danger">
+                  <h3 className="dash-settings-danger-heading">
+                    Danger zone
                   </h3>
-                  <p className="text-xs text-zinc-400 mb-5 leading-relaxed max-w-xl">
+                  <p className="dash-settings-desc">
                     Permanently delete your account and all associated conversion records, reader annotations, and tags. This action cannot be reversed.
                   </p>
                   <button
                     type="button"
                     onClick={() => setShowDeleteModal(true)}
-                    className="px-5 py-2.5 text-xs font-semibold text-red-200 hover:text-white bg-red-950/60 hover:bg-red-900/80 border border-red-800/60 hover:border-red-600 rounded-xl transition-all shadow-sm cursor-pointer inline-flex items-center gap-2"
+                    className="dash-danger-btn"
                   >
-                    <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="dash-danger-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                     Delete My Account &amp; Data
@@ -398,8 +394,13 @@ function DashboardContent() {
 
       <style jsx>{`
         .dash-shell {
-          display: flex;
+          display: grid;
+          grid-template-columns: 256px minmax(0, 1fr);
+          grid-template-rows: 1fr;
           min-height: 100vh;
+          width: 100%;
+          margin: 0;
+          padding: 0;
           background: var(--bg-base);
           color: var(--text-primary);
           position: relative;
@@ -407,18 +408,21 @@ function DashboardContent() {
 
         /* ── Sidebar ── */
         .dash-sidebar {
+          grid-column: 1;
+          grid-row: 1;
           width: 256px;
-          flex-shrink: 0;
+          height: 100vh;
+          position: sticky;
+          top: 0;
+          left: 0;
+          overflow-y: auto;
           display: flex;
           flex-direction: column;
           border-right: 1px solid var(--border-hairline);
           padding: 24px 18px;
-          position: sticky;
-          top: 0;
-          height: 100vh;
-          overflow-y: auto;
           background: var(--bg-base);
           z-index: 30;
+          box-sizing: border-box;
         }
 
         /* ── Logo ── */
@@ -489,9 +493,9 @@ function DashboardContent() {
           color: #fbbf24;
         }
         .dash-status-desc {
-          font-size: 0.625rem;
-          color: var(--text-muted);
-          line-height: 1.2;
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          line-height: 1.35;
           margin-top: 2px;
           white-space: nowrap;
           overflow: hidden;
@@ -502,14 +506,20 @@ function DashboardContent() {
           display: none;
         }
 
+        /* ── Sidebar Bottom Area (Appearance, Profile, Footer) ── */
+        .dash-sidebar-bottom {
+          margin-top: auto;
+          display: flex;
+          flex-direction: column;
+        }
+
         /* ── Profile ── */
         .dash-profile {
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 16px 0 0;
+          padding: 14px 0 0;
           border-top: 1px solid var(--border-hairline);
-          margin-top: auto;
         }
         :global(.dash-avatar) {
           border-radius: 50%;
@@ -529,27 +539,13 @@ function DashboardContent() {
           line-height: 1.2;
         }
         .dash-profile-email {
-          font-size: 0.6875rem;
-          color: var(--text-muted);
+          font-size: 0.75rem;
+          color: var(--text-secondary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          margin-top: 1px;
-          line-height: 1.2;
-        }
-        .dash-delete-link {
-          display: block;
-          margin-top: 3px;
-          background: none;
-          border: none;
-          padding: 0;
-          font-size: 0.625rem;
-          color: var(--text-muted);
-          cursor: pointer;
-          transition: color var(--transition-fast);
-        }
-        .dash-delete-link:hover {
-          color: var(--accent-bad);
+          margin-top: 2px;
+          line-height: 1.35;
         }
         .dash-signout {
           flex-shrink: 0;
@@ -613,17 +609,21 @@ function DashboardContent() {
 
         /* ── Main Workspace ── */
         .dash-main {
-          flex: 1;
+          grid-column: 2;
+          grid-row: 1;
           min-width: 0;
+          width: 100%;
           overflow-y: auto;
+          background: var(--bg-base);
         }
         .dash-main-inner {
-          max-width: 1200px;
-          margin: 0 auto;
+          max-width: 1400px;
+          margin: 0;
           padding: clamp(28px, 4vw, 56px) clamp(20px, 4vw, 48px);
           display: flex;
           flex-direction: column;
           gap: clamp(32px, 4vw, 48px);
+          width: 100%;
         }
 
         /* ── Header ── */
@@ -641,8 +641,7 @@ function DashboardContent() {
           font-size: clamp(1.75rem, 3.5vw, 2.75rem);
           line-height: 1.15;
           letter-spacing: -0.015em;
-          word-spacing: 0.12em;
-          text-transform: uppercase;
+          text-transform: none;
           color: var(--text-primary);
         }
         .dash-sub {
@@ -651,6 +650,106 @@ function DashboardContent() {
           font-size: 0.9375rem;
           line-height: 1.6;
           color: var(--text-secondary);
+        }
+
+        /* ── Settings Section ── */
+        .dash-settings-grid {
+          display: grid;
+          gap: 24px;
+          max-width: 48rem;
+        }
+        .dash-settings-card {
+          padding: 24px 28px;
+          border-radius: var(--radius-lg);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          transition: border-color var(--transition-fast), background var(--transition-fast);
+        }
+        .dash-settings-heading {
+          font-family: var(--font-body);
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: none;
+          color: var(--text-primary);
+          margin-bottom: 8px;
+        }
+        .dash-settings-desc {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          line-height: 1.6;
+          margin-bottom: 20px;
+          max-width: 38rem;
+        }
+        .dash-settings-privacy-body {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          line-height: 1.6;
+          max-width: 42rem;
+        }
+        .dash-settings-strong {
+          color: var(--text-primary);
+          font-weight: 600;
+        }
+        .dash-settings-links {
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          padding-top: 8px;
+          font-size: 0.75rem;
+        }
+        :global(.dash-settings-link) {
+          color: var(--accent-purple);
+          text-decoration: none;
+          font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          transition: color var(--transition-fast);
+        }
+        :global(.dash-settings-link:hover) {
+          color: var(--accent-hover);
+        }
+        .dash-settings-danger {
+          border-color: rgba(248, 113, 113, 0.25);
+          background: var(--bg-surface);
+        }
+        .dash-settings-danger-heading {
+          font-family: var(--font-body);
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: none;
+          color: var(--accent-bad);
+          margin-bottom: 8px;
+        }
+        .dash-danger-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 20px;
+          border-radius: var(--radius-md);
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #fca5a5;
+          background: rgba(153, 27, 27, 0.25);
+          border: 1px solid rgba(239, 68, 68, 0.35);
+          cursor: pointer;
+          transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+        }
+        .dash-danger-btn:hover {
+          background: rgba(153, 27, 27, 0.45);
+          border-color: rgba(239, 68, 68, 0.6);
+          color: #ffffff;
+        }
+        .dash-danger-icon {
+          width: 16px;
+          height: 16px;
+          flex-shrink: 0;
+          color: var(--accent-bad);
         }
 
         /* ── History section ── */
@@ -662,10 +761,10 @@ function DashboardContent() {
         }
         .dash-section-title {
           font-family: var(--font-body);
-          font-size: 0.6875rem;
+          font-size: 0.75rem;
           font-weight: 700;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          text-transform: none;
           color: var(--text-muted);
           white-space: nowrap;
         }
@@ -681,8 +780,9 @@ function DashboardContent() {
           align-items: center;
           gap: 12px;
           width: 100%;
-          min-height: 42px;
-          padding: 9px 12px;
+          min-height: 40px;
+          height: 40px;
+          padding: 0 12px;
           border: 1px solid transparent;
           border-radius: var(--radius-md);
           background: transparent;
@@ -696,6 +796,7 @@ function DashboardContent() {
           text-decoration: none;
           cursor: pointer;
           position: relative;
+          box-sizing: border-box;
           transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
         }
         :global(.nav-item:hover) {
@@ -711,6 +812,7 @@ function DashboardContent() {
         }
         :global(.nav-item .nav-icon) {
           width: 20px;
+          min-width: 20px;
           height: 20px;
           display: inline-flex;
           align-items: center;
@@ -718,12 +820,17 @@ function DashboardContent() {
           flex-shrink: 0;
           color: currentColor;
         }
+        :global(.nav-item .nav-icon svg) {
+          width: 16px;
+          height: 16px;
+          display: block;
+        }
         :global(.nav-item .nav-label) {
           flex: 1;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          line-height: 1;
+          line-height: 1.2;
         }
         :global(.nav-item.is-active .nav-active-pill) {
           width: 4px;
@@ -737,6 +844,7 @@ function DashboardContent() {
         /* ── Responsive Mobile & Tablet Shell ── */
         @media (max-width: 768px) {
           .dash-shell {
+            display: flex;
             flex-direction: column;
             padding-bottom: 72px; /* space for fixed mobile bottom nav */
           }
@@ -745,6 +853,7 @@ function DashboardContent() {
             height: auto;
             position: sticky;
             top: 0;
+            left: 0;
             z-index: 40;
             flex-direction: row;
             align-items: center;
@@ -762,13 +871,33 @@ function DashboardContent() {
           .dash-nav {
             display: none;
           }
-          .dash-theme {
-            margin: 0;
-            padding: 0;
-            border: none;
-          }
           .dash-status-block {
             display: none;
+          }
+          .dash-sidebar-bottom {
+            margin-top: 0;
+            flex-direction: row;
+            align-items: center;
+          }
+          .dash-theme {
+            display: none;
+          }
+          .dash-sidebar-footer {
+            display: none;
+          }
+          .dash-profile {
+            border-top: none;
+            margin-top: 0;
+            padding: 0;
+            gap: 8px;
+          }
+          .dash-profile-info {
+            display: none;
+          }
+          .dash-main {
+            grid-column: unset;
+            grid-row: unset;
+            width: 100%;
           }
           .dash-mobile-offline-banner {
             display: flex;
@@ -790,18 +919,6 @@ function DashboardContent() {
             background: #f59e0b;
             flex-shrink: 0;
             box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
-          }
-          .dash-profile {
-            border-top: none;
-            margin-top: 0;
-            padding: 0;
-            gap: 8px;
-          }
-          .dash-profile-info {
-            display: none;
-          }
-          .dash-sidebar-footer {
-            display: none;
           }
 
           /* Mobile bottom tab bar */
@@ -844,7 +961,8 @@ function DashboardContent() {
           }
         }
       `}</style>
-    </div>
+      </div>
+    </>
   );
 }
 

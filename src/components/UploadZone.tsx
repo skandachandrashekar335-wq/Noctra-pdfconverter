@@ -25,6 +25,8 @@ import {
   normalizeHexColor,
   saveStoredConversionProfile,
   saveStoredCustomColor,
+  STORAGE_PROFILE_KEY,
+  STORAGE_CUSTOM_COLOR_KEY,
   type ConversionProfileId,
 } from "@/lib/conversion-profiles";
 import type { ConversionQualityReport } from "@/lib/conversion";
@@ -135,9 +137,47 @@ export function UploadZone({
     };
   }, [customProfile]);
 
+  useEffect(() => {
+    const handleProfileChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ profile: ConversionProfileId }>;
+      if (customEvent.detail?.profile) {
+        setProfile(customEvent.detail.profile);
+      }
+    };
+    const handleColorChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ color: string }>;
+      if (customEvent.detail?.color) {
+        setCustomColor(customEvent.detail.color);
+        setCustomHexInput(customEvent.detail.color);
+      }
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_PROFILE_KEY) {
+        setProfile(getStoredConversionProfile());
+      } else if (e.key === STORAGE_CUSTOM_COLOR_KEY) {
+        const c = getStoredCustomColor();
+        setCustomColor(c);
+        setCustomHexInput(c);
+      }
+    };
+    window.addEventListener("noctra:conversion-profile-changed", handleProfileChange);
+    window.addEventListener("noctra:custom-color-changed", handleColorChange);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("noctra:conversion-profile-changed", handleProfileChange);
+      window.removeEventListener("noctra:custom-color-changed", handleColorChange);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
   const handleSelectProfile = useCallback((id: ConversionProfileId) => {
     setProfile(id);
     saveStoredConversionProfile(id);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("noctra:conversion-profile-changed", { detail: { profile: id } })
+      );
+    }
   }, []);
 
   const handleSelectCustomColor = useCallback((hex: string) => {
@@ -145,6 +185,11 @@ export function UploadZone({
     setCustomColor(normalized);
     setCustomHexInput(normalized);
     saveStoredCustomColor(normalized);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("noctra:custom-color-changed", { detail: { color: normalized } })
+      );
+    }
   }, []);
 
   const handleHexInputChange = useCallback((val: string) => {
@@ -153,6 +198,11 @@ export function UploadZone({
       const normalized = normalizeHexColor(val);
       setCustomColor(normalized);
       saveStoredCustomColor(normalized);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("noctra:custom-color-changed", { detail: { color: normalized } })
+        );
+      }
     }
   }, []);
 
@@ -529,7 +579,8 @@ export function UploadZone({
                   : "Drop your document here"}
               </p>
               <p className="drop-sub">
-                or <span className="drop-link">browse to upload</span>
+                Single document conversion · or{" "}
+                <span className="drop-link">browse to upload</span>
               </p>
               <p className="drop-hint">
                  PDF · DOCX · PPTX &nbsp;·&nbsp; up to{" "}
@@ -910,33 +961,46 @@ export function UploadZone({
         }
         .profile-label {
           color: var(--text-muted);
-          font-size: 0.6875rem;
+          font-size: 0.75rem;
           font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          text-transform: none;
         }
         .profile-reset {
-          background: transparent;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 32px;
+          height: 32px;
+          padding: 0 14px;
+          background: var(--bg-surface);
           border: 1px solid var(--border-default);
           border-radius: var(--radius-pill);
           color: var(--text-secondary);
-          font: inherit;
-          font-size: 0.6875rem;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          padding: 6px 14px;
+          font-family: inherit;
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          text-transform: none;
           cursor: pointer;
           transition: color var(--transition-fast),
-            border-color var(--transition-fast);
+            background var(--transition-fast),
+            border-color var(--transition-fast),
+            box-shadow var(--transition-fast);
         }
         .profile-reset:hover:not(:disabled) {
           color: var(--text-primary);
+          background: var(--bg-elevated);
           border-color: var(--border-strong);
+        }
+        .profile-reset:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 2px var(--bg-page), 0 0 0 4px var(--accent-purple);
         }
         .profile-reset:disabled {
           opacity: 0.4;
           cursor: not-allowed;
+          background: transparent;
         }
         .profile-options {
           display: grid;
@@ -1219,8 +1283,7 @@ export function UploadZone({
           font-size: clamp(1.25rem, 2.6vw, 1.75rem);
           line-height: 1.2;
           letter-spacing: -0.015em;
-          word-spacing: 0.12em;
-          text-transform: uppercase;
+          text-transform: none;
           color: var(--text-primary);
           text-align: center;
         }

@@ -1115,6 +1115,40 @@ export default function LandingPage() {
               </li>
             </ul>
           </div>
+
+          <div className="footer-col footer-creator-col">
+            <h2 className="footer-heading">Created By</h2>
+            <div className="footer-creator-body">
+              <p className="footer-creator-name">Skanda Chandrashekar</p>
+              <p className="footer-creator-role">Developer &amp; Creator of Noctra</p>
+              <a
+                href="https://github.com/skandachandrashekar335-wq"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="footer-github-link"
+                aria-label="GitHub profile of Skanda Chandrashekar (opens in a new tab)"
+              >
+                <svg
+                  className="footer-github-icon"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                  />
+                </svg>
+                <span>GitHub</span>
+              </a>
+              <p className="footer-creator-note">
+                Designed &amp; built with care by Skanda.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="shell footer-base">
@@ -2349,6 +2383,54 @@ export default function LandingPage() {
           font-size: 0.9375rem;
           color: var(--ink-50);
         }
+        .footer-creator-body {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .footer-creator-name {
+          font-family: var(--font-body);
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin: 0;
+          line-height: 1.35;
+        }
+        .footer-creator-role {
+          font-size: 0.8125rem;
+          color: var(--ink-62);
+          margin: 0 0 6px;
+          line-height: 1.4;
+        }
+        .footer-github-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--ink-82);
+          text-decoration: none;
+          transition: color var(--transition-fast);
+          width: fit-content;
+          margin-bottom: 8px;
+        }
+        .footer-github-link:hover {
+          color: var(--text-primary);
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+        .footer-github-icon {
+          width: 15px;
+          height: 15px;
+          flex-shrink: 0;
+          fill: currentColor;
+        }
+        .footer-creator-note {
+          font-size: 0.75rem;
+          color: var(--ink-50);
+          line-height: 1.45;
+          margin: 0;
+        }
         .footer-base {
           margin-top: clamp(40px, 6vw, 68px);
           padding-top: 24px;
@@ -2380,10 +2462,20 @@ export default function LandingPage() {
           color: var(--text-primary);
         }
 
-        @media (min-width: 760px) {
+        @media (min-width: 640px) and (max-width: 1023px) {
           .footer-grid {
-            grid-template-columns: 1.6fr 1fr 1fr 1fr;
-            gap: clamp(28px, 4vw, 56px);
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px 36px;
+          }
+          .footer-brand {
+            grid-column: span 2;
+          }
+        }
+
+        @media (min-width: 1024px) {
+          .footer-grid {
+            grid-template-columns: 1.5fr 0.9fr 1.05fr 0.95fr 1.3fr;
+            gap: clamp(24px, 3.2vw, 44px);
           }
         }
 

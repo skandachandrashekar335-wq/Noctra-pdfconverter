@@ -8,6 +8,8 @@ import {
   getStoredCustomColor,
   saveStoredConversionProfile,
   saveStoredCustomColor,
+  STORAGE_PROFILE_KEY,
+  STORAGE_CUSTOM_COLOR_KEY,
   type ConversionProfileId,
 } from "@/lib/conversion-profiles";
 import {
@@ -90,6 +92,36 @@ export function BatchUploadZone() {
       resources.releaseAll();
     };
   }, [resources]);
+
+  useEffect(() => {
+    const handleProfileChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ profile: ConversionProfileId }>;
+      if (customEvent.detail?.profile) {
+        setProfile(customEvent.detail.profile);
+      }
+    };
+    const handleColorChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ color: string }>;
+      if (customEvent.detail?.color) {
+        setCustomColor(customEvent.detail.color);
+      }
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_PROFILE_KEY) {
+        setProfile(getStoredConversionProfile());
+      } else if (e.key === STORAGE_CUSTOM_COLOR_KEY) {
+        setCustomColor(getStoredCustomColor());
+      }
+    };
+    window.addEventListener("noctra:conversion-profile-changed", handleProfileChange);
+    window.addEventListener("noctra:custom-color-changed", handleColorChange);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("noctra:conversion-profile-changed", handleProfileChange);
+      window.removeEventListener("noctra:custom-color-changed", handleColorChange);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   const addFiles = useCallback((files: File[]) => {
     const next = files.map((file, index): BatchItem => {
@@ -311,19 +343,24 @@ export function BatchUploadZone() {
       >
         <input ref={inputRef} type="file" multiple accept=".pdf,.docx,.pptx" className="sr-only" onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
         <div>
-          <p className="batch-title">Batch workspace</p>
+          <p className="batch-title">Convert multiple documents</p>
           <p className="batch-sub">Queue up to 20 PDF, DOCX or PPTX files. Two files process at a time to keep the browser responsive.</p>
         </div>
         <div className="batch-actions">
           <button type="button" className="noctra-btn-secondary" onClick={() => inputRef.current?.click()}>Choose files</button>
           <label className="batch-profile">
-            <span>Default theme</span>
+            <span>Default theme:</span>
             <select
               value={profile}
               onChange={(event) => {
                 const p = event.target.value as ConversionProfileId;
                 setProfile(p);
                 saveStoredConversionProfile(p);
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("noctra:conversion-profile-changed", { detail: { profile: p } })
+                  );
+                }
               }}
               disabled={running}
             >
@@ -340,6 +377,11 @@ export function BatchUploadZone() {
                 onChange={(e) => {
                   setCustomColor(e.target.value);
                   saveStoredCustomColor(e.target.value);
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("noctra:custom-color-changed", { detail: { color: e.target.value } })
+                    );
+                  }
                 }}
                 className="batch-color-picker"
                 title="Default custom background color"
@@ -424,7 +466,7 @@ export function BatchUploadZone() {
         .batch-drop, .batch-panel { border: 1px solid var(--border-default); border-radius: var(--radius-xl); background: var(--bg-surface); }
         .batch-drop { display: grid; gap: 20px; padding: 24px; transition: border-color var(--transition-base), background var(--transition-base); }
         .batch-drop.is-dragging { border-color: var(--accent-purple); background: var(--accent-purple-dim); }
-        .batch-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.015em; word-spacing: 0.12em; line-height: 1.25; text-transform: uppercase; }
+        .batch-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; text-transform: none; }
         .batch-sub { max-width: 64ch; color: var(--text-secondary); font-size: .875rem; line-height: 1.55; margin-top: 6px; }
         .batch-actions, .batch-head, .batch-head-actions, .batch-footer { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .batch-profile { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: .75rem; }

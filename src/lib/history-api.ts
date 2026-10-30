@@ -76,6 +76,12 @@ export function historyFailureMessage(reason: HistoryFailureReason): string {
 export type TokenProvider = () => Promise<string | null>;
 
 const defaultTokenProvider: TokenProvider = async () => {
+  if (
+    typeof window !== "undefined" &&
+    (window as unknown as { __NOCTRA_MOCK_TOKEN__?: string }).__NOCTRA_MOCK_TOKEN__
+  ) {
+    return (window as unknown as { __NOCTRA_MOCK_TOKEN__?: string }).__NOCTRA_MOCK_TOKEN__!;
+  }
   const user = auth?.currentUser ?? null;
   if (!user) return null;
   try {

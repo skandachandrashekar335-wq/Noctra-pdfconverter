@@ -6,6 +6,10 @@ import {
   createStudyProvider,
   StudyInputError,
   StudyProviderUnavailableError,
+  StudyProviderError,
+  StudyProviderRateLimitError,
+  StudyProviderAuthError,
+  StudyTimeoutError,
   studyConfigMessage,
   validateStudyRequest,
 } from "@/lib/ai-study";
@@ -16,11 +20,23 @@ import {
 } from "@/lib/server/rate-limiter";
 
 export async function POST(request: NextRequest) {
-  const auth = await authenticateRequest(request, { verifyToken: verifyUnifiedToken });
-  if (auth instanceof NextResponse) return auth;
+  let rateLimitKey: string;
+  const authHeader = request.headers.get("authorization");
 
-  // Enforce server-side rate limiting per user UID
-  const rateLimit = await checkRateLimit(`study:${auth.uid}`, {
+  if (authHeader) {
+    const auth = await authenticateRequest(request, { verifyToken: verifyUnifiedToken });
+    if (auth instanceof NextResponse) return auth;
+    rateLimitKey = `study:user:${auth.uid}`;
+  } else {
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "anonymous-client";
+    rateLimitKey = `study:guest:${ip}`;
+  }
+
+  // Enforce server-side rate limiting
+  const rateLimit = await checkRateLimit(rateLimitKey, {
     limit: 20,
     windowSeconds: 60,
   });
@@ -67,15 +83,48 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof StudyProviderUnavailableError) {
       const res = NextResponse.json(
-        { error: studyConfigMessage(), code: "study/not-configured" },
+        { error: error.message || studyConfigMessage(), code: "study/not-configured" },
         { status: 503 }
       );
       return applyRateLimitHeaders(res, rateLimit);
     }
-    console.error("Noctra study provider failure", { code: "study/provider-error" });
+    if (error instanceof StudyProviderRateLimitError) {
+      const res = NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 429 }
+      );
+      return applyRateLimitHeaders(res, rateLimit);
+    }
+    if (error instanceof StudyProviderAuthError) {
+      const res = NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 503 }
+      );
+      return applyRateLimitHeaders(res, rateLimit);
+    }
+    if (error instanceof StudyTimeoutError) {
+      const res = NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 504 }
+      );
+      return applyRateLimitHeaders(res, rateLimit);
+    }
+    if (error instanceof StudyProviderError) {
+      const res = NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
+      );
+      return applyRateLimitHeaders(res, rateLimit);
+    }
+
+    console.error("Noctra study provider failure", {
+      code: "study/provider-error",
+      error: error instanceof Error ? error.message : String(error),
+    });
+
     const res = NextResponse.json(
       {
-        error: "The study provider could not complete this request.",
+        error: error instanceof Error ? error.message : "The study provider could not complete this request.",
         code: "study/provider-error",
       },
       { status: 502 }

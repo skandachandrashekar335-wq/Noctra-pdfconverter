@@ -341,14 +341,40 @@ export function ConversionList({ refreshToken = 0 }: ConversionListProps) {
         }
         .history-bulkbar label { display: inline-flex; align-items: center; gap: 8px; }
         .history-bulk-delete {
-          border: 0;
-          background: transparent;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 32px;
+          height: 32px;
+          padding: 0 12px;
+          border: 1px solid rgba(248, 113, 113, 0.35);
+          border-radius: var(--radius-sm);
+          background: rgba(248, 113, 113, 0.08);
           color: var(--accent-bad);
           cursor: pointer;
-          font: inherit;
+          font-family: inherit;
           font-size: 0.75rem;
+          font-weight: 600;
+          transition: background var(--transition-fast),
+            border-color var(--transition-fast),
+            color var(--transition-fast),
+            box-shadow var(--transition-fast);
         }
-        .history-bulk-delete:disabled { opacity: 0.45; cursor: not-allowed; }
+        .history-bulk-delete:hover:not(:disabled) {
+          background: rgba(248, 113, 113, 0.18);
+          border-color: var(--accent-bad);
+        }
+        .history-bulk-delete:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 2px var(--bg-page), 0 0 0 4px var(--accent-bad);
+        }
+        .history-bulk-delete:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+          border-color: var(--border-default);
+          background: transparent;
+          color: var(--text-muted);
+        }
         .history-filter-empty { padding: 24px 0; color: var(--text-muted); font-size: 0.875rem; }
         .conversion-list {
           display: flex;
@@ -497,7 +523,7 @@ function ConversionRow({
               onSaveTags([...new Set([...(c.tags ?? []), tag])].slice(0, 20));
               setTagDraft("");
             }}
-            placeholder="Add tag"
+            placeholder="+ Add tag…"
             aria-label={`Add tag to ${c.originalFileName}`}
             disabled={updating}
           />
@@ -578,7 +604,29 @@ function ConversionRow({
         }
         .conv-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
         .conv-tag { padding: 2px 6px; border: 1px solid var(--border-default); border-radius: var(--radius-pill); color: var(--accent-purple); font-size: .625rem; }
-        .conv-tags input { width: 70px; border: 0; border-bottom: 1px solid var(--border-default); background: transparent; color: var(--text-secondary); outline: 0; font: inherit; font-size: .625rem; }
+        .conv-tags input {
+          width: 86px;
+          height: 24px;
+          padding: 0 8px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-sm);
+          background: var(--bg-surface);
+          color: var(--text-primary);
+          outline: none;
+          font: inherit;
+          font-size: 0.6875rem;
+          transition: border-color var(--transition-fast),
+            box-shadow var(--transition-fast),
+            background var(--transition-fast);
+        }
+        .conv-tags input:focus {
+          border-color: var(--accent-purple);
+          background: var(--bg-elevated);
+          box-shadow: 0 0 0 1px var(--accent-purple);
+        }
+        .conv-tags input::placeholder {
+          color: var(--text-muted);
+        }
         .conv-status {
           flex-shrink: 0;
           display: flex;

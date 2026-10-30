@@ -28,6 +28,7 @@ export function StudyStudio() {
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError(null);
     setResult(null);
 
@@ -64,18 +65,24 @@ export function StudyStudio() {
           task,
           question: question.trim() ? question.trim() : undefined,
           consent: true,
-          passages: [{ pageNumber: 1, text: text.trim().slice(0, 15000) }],
+          passages: [{ pageNumber: 1, text: text.trim().slice(0, 5000) }],
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Study assistant could not complete this request.");
+        if (res.status === 429) {
+          setError("Rate limit reached. Please wait a moment before generating again.");
+        } else if (res.status === 503) {
+          setError(data.error || "The AI Study service is temporarily unavailable. Please try again shortly.");
+        } else {
+          setError(data.error || "Study assistant could not complete this request.");
+        }
       } else {
         setResult(data.answer);
       }
     } catch {
-      setError("Network error connecting to study assistant.");
+      setError("Network error connecting to study assistant. Please check your connection.");
     } finally {
       setLoading(false);
     }
@@ -90,58 +97,62 @@ export function StudyStudio() {
 
   return (
     <div className="study-studio-root">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+      <div className="study-grid">
         {/* Controls form */}
-        <form onSubmit={handleGenerate} className="lg:col-span-5 flex flex-col gap-4">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-300">
+        <form onSubmit={handleGenerate} className="study-form">
+          {/* Study objective section */}
+          <div className="study-field">
+            <div className="study-field-header">
+              <label className="study-label">
                 Select Study Objective
               </label>
-              <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
+              <span className="study-badge">
                 8 Formats
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {STUDY_TASKS.map((t) => (
-                <button
-                  type="button"
-                  key={t.id}
-                  onClick={() => setTask(t.id)}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer min-h-[64px] flex flex-col justify-center ${
-                    task === t.id
-                      ? "bg-purple-950/40 border-purple-500 text-white shadow-md shadow-purple-950/50 ring-1 ring-purple-500/40"
-                      : "bg-[#0f1115] border-zinc-800/90 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 hover:bg-[#14161c]"
-                  }`}
-                >
-                  <p className="text-xs font-semibold leading-tight text-zinc-100">{t.label}</p>
-                  <p className="text-[10.5px] text-zinc-400 mt-1 leading-snug break-words">{t.desc}</p>
-                </button>
-              ))}
+            <div className="study-tasks-grid">
+              {STUDY_TASKS.map((t) => {
+                const isActive = task === t.id;
+                return (
+                  <button
+                    type="button"
+                    key={t.id}
+                    onClick={() => setTask(t.id)}
+                    className={`study-task-card ${isActive ? "is-active" : ""}`}
+                    aria-pressed={isActive}
+                  >
+                    <span className="study-task-title">{t.label}</span>
+                    <span className="study-task-desc">{t.desc}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="study-text" className="block text-xs font-semibold uppercase tracking-wider text-zinc-300">
+          {/* Passages / notes input */}
+          <div className="study-field">
+            <div className="study-field-header">
+              <label htmlFor="study-text" className="study-label">
                 Study Passages / Notes
               </label>
-              <span className="text-[10px] text-zinc-500">
-                {text.length}/15,000
+              <span className="study-counter">
+                {text.length.toLocaleString()} / 5,000
               </span>
             </div>
             <textarea
               id="study-text"
               rows={6}
+              maxLength={5000}
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Paste lecture notes, textbook excerpts, or study material here..."
-              className="w-full px-4 py-3 rounded-xl bg-[#0f1115] border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 text-xs font-sans leading-relaxed resize-y min-h-[140px]"
+              className="study-textarea"
             />
           </div>
 
-          <div>
-            <label htmlFor="study-question" className="block text-xs font-semibold uppercase tracking-wider text-zinc-300 mb-1.5">
+          {/* Specific focus input */}
+          <div className="study-field">
+            <label htmlFor="study-question" className="study-label mb-2">
               Specific Focus / Question (Optional)
             </label>
             <input
@@ -150,57 +161,62 @@ export function StudyStudio() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="e.g. Focus on memory hierarchy and cache coherence"
-              className="w-full px-4 py-2.5 rounded-xl bg-[#0f1115] border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 text-xs"
+              className="study-input"
             />
           </div>
 
-          <div className="p-3.5 rounded-xl bg-[#0f1115] border border-zinc-800/80">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={consent}
-                onChange={(e) => setConsent(e.target.checked)}
-                className="mt-0.5 rounded border-zinc-700 text-purple-600 focus:ring-purple-500 cursor-pointer"
-              />
-              <span className="text-[11px] text-zinc-400 leading-relaxed">
-                <strong className="text-zinc-200">Explicit Privacy Consent:</strong> I authorize sending the supplied passages to Google Gemini to generate study aids. No personal credentials or original PDF files are transmitted.
+          {/* Explicit privacy consent checkbox */}
+          <div className="study-consent-card">
+            <label className="study-consent-layout">
+              <span className="study-checkbox-col">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="study-checkbox"
+                />
+              </span>
+              <span className="study-consent-text">
+                <strong className="study-consent-strong">Explicit Privacy Consent:</strong>{" "}
+                I authorize sending the supplied passages to Google Gemini to generate study aids. No personal credentials or original PDF files are transmitted.
               </span>
             </label>
           </div>
 
+          {/* Generate button */}
           <button
             type="submit"
             disabled={loading || !consent}
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:from-purple-700 active:to-indigo-700 disabled:opacity-40 text-white font-semibold text-xs uppercase tracking-wider transition-all shadow-lg shadow-purple-600/20 flex items-center justify-center gap-2 cursor-pointer"
+            className="study-generate-btn"
           >
             {loading ? (
               <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <svg className="study-spinner" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Analyzing with Gemini...
+                <span>Analyzing with Gemini...</span>
               </>
             ) : (
-              "Generate Study Aid"
+              <span>Generate Study Aid</span>
             )}
           </button>
 
           {error && (
-            <div role="alert" className="p-3.5 rounded-xl bg-red-950/40 border border-red-800/50 text-red-200 text-xs leading-relaxed">
+            <div role="alert" className="study-error-alert">
               {error}
             </div>
           )}
         </form>
 
         {/* Output display */}
-        <div className="lg:col-span-7 flex flex-col min-h-[520px] bg-[#0f1115] border border-zinc-800/80 rounded-2xl p-5 sm:p-6 shadow-inner">
-          <div className="flex items-center justify-between pb-3.5 border-b border-zinc-800/80">
-            <div className="flex items-center gap-2.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+        <div className="study-output-panel">
+          <div className="study-output-header">
+            <div className="study-output-title-group">
+              <span className="study-output-title">
                 Generated Study Output
               </span>
-              <span className="px-2 py-0.5 rounded-full bg-purple-950/60 border border-purple-800/40 text-[10px] text-purple-300 uppercase tracking-wider font-semibold">
+              <span className="study-output-badge">
                 {STUDY_TASKS.find((t) => t.id === task)?.label ?? "Study Aid"}
               </span>
             </div>
@@ -208,40 +224,471 @@ export function StudyStudio() {
               <button
                 type="button"
                 onClick={handleCopy}
-                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-zinc-700/60 cursor-pointer"
+                className="study-copy-btn"
               >
                 {copied ? "✓ Copied!" : "Copy Output"}
               </button>
             )}
           </div>
 
-          <div className="flex-1 mt-4 overflow-y-auto">
+          <div className="study-output-body">
             {result ? (
-              <div className="prose prose-invert prose-zinc max-w-none text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap font-sans text-zinc-200">
+              <div className="study-result-prose">
                 {result}
               </div>
             ) : (
-              <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 text-zinc-500">
-                <div className="w-12 h-12 rounded-2xl bg-purple-950/30 border border-purple-800/30 flex items-center justify-center mb-4 text-purple-400">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="study-empty-state">
+                <div className="study-empty-icon-wrap" aria-hidden="true">
+                  <svg className="study-empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
                 </div>
-                <p className="text-sm font-semibold text-zinc-200">Ready for Study Analysis</p>
-                <p className="text-xs text-zinc-400 max-w-sm mt-1.5 leading-relaxed">
+                <h3 className="study-empty-heading">Ready for Study Analysis</h3>
+                <p className="study-empty-desc">
                   Paste textbook excerpts or lecture notes on the left, pick a study objective, and generate instant summaries, flashcards, and quizzes.
                 </p>
-                <div className="flex flex-wrap items-center justify-center gap-2 mt-5 text-[11px] text-zinc-400">
-                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">📖 Executive Summary</span>
-                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">🃏 Flashcards</span>
-                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">🎯 Practice Quiz</span>
-                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">⏱ Revision Plan</span>
+                <div className="study-empty-chips">
+                  <span className="study-chip">📖 Executive Summary</span>
+                  <span className="study-chip">🃏 Flashcards</span>
+                  <span className="study-chip">🎯 Practice Quiz</span>
+                  <span className="study-chip">⏱ Revision Plan</span>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .study-studio-root {
+          width: 100%;
+        }
+        .study-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 28px;
+          align-items: start;
+        }
+        @media (min-width: 1024px) {
+          .study-grid {
+            grid-template-columns: minmax(400px, 5fr) minmax(0, 7fr);
+            gap: 32px;
+            align-items: start;
+          }
+        }
+
+        /* ── Form Column ── */
+        .study-form {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+        .study-field {
+          display: flex;
+          flex-direction: column;
+        }
+        .study-field-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        }
+        .study-label {
+          font-family: var(--font-body);
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          line-height: 1.2;
+          display: block;
+        }
+        .study-badge {
+          font-family: var(--font-body);
+          font-size: 0.625rem;
+          font-weight: 600;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          background: var(--bg-inset);
+          padding: 2px 8px;
+          border-radius: var(--radius-pill);
+          border: 1px solid var(--border-subtle);
+          line-height: 1.4;
+        }
+        .study-counter {
+          font-family: var(--font-body);
+          font-size: 0.625rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          color: var(--text-muted);
+          font-variant-numeric: tabular-nums;
+        }
+
+        /* ── Study Objective Cards Grid ── */
+        .study-tasks-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+        @media (min-width: 520px) {
+          .study-tasks-grid {
+            grid-template-columns: repeat(2, 1fr);
+            align-items: stretch;
+          }
+        }
+        .study-task-card {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          justify-content: flex-start;
+          height: 100%;
+          min-height: 72px;
+          padding: 13px 15px;
+          border-radius: var(--radius-lg);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          text-align: left;
+          cursor: pointer;
+          transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+          box-sizing: border-box;
+        }
+        .study-task-card:hover {
+          border-color: var(--border-default);
+          background: var(--bg-elevated);
+        }
+        .study-task-card.is-active {
+          background: var(--accent-purple-dim);
+          border-color: var(--accent-purple);
+          box-shadow: 0 0 0 1px var(--accent-purple), 0 4px 12px rgba(124, 109, 255, 0.15);
+        }
+        .study-task-title {
+          display: block;
+          width: 100%;
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          color: var(--text-primary);
+          line-height: 1.25;
+          margin: 0;
+          padding: 0;
+        }
+        .study-task-desc {
+          display: block;
+          width: 100%;
+          font-family: var(--font-body);
+          font-size: 0.6875rem;
+          color: var(--text-muted);
+          line-height: 1.35;
+          margin-top: 5px;
+          margin-bottom: 0;
+          padding: 0;
+        }
+        .study-task-card.is-active .study-task-desc {
+          color: var(--text-secondary);
+        }
+
+        /* ── Textarea & Inputs ── */
+        .study-textarea {
+          width: 100%;
+          min-height: 125px;
+          padding: 13px 15px;
+          border-radius: var(--radius-lg);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          line-height: 1.55;
+          resize: vertical;
+          box-sizing: border-box;
+          transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+          margin: 0;
+        }
+        .study-textarea::placeholder,
+        .study-input::placeholder {
+          color: var(--text-muted);
+          opacity: 0.85;
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          line-height: 1.55;
+        }
+        .study-textarea:focus,
+        .study-input:focus {
+          outline: none;
+          border-color: var(--accent-purple);
+          box-shadow: 0 0 0 2px var(--accent-purple-dim);
+        }
+        .study-input {
+          width: 100%;
+          height: 40px;
+          padding: 0 14px;
+          border-radius: var(--radius-md);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          line-height: 38px;
+          box-sizing: border-box;
+          transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+          margin: 0;
+        }
+        .mb-2 {
+          margin-bottom: 8px;
+        }
+
+        /* ── Privacy Consent Card ── */
+        .study-consent-card {
+          padding: 12px 14px;
+          border-radius: var(--radius-lg);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          box-sizing: border-box;
+        }
+        .study-consent-layout {
+          display: grid;
+          grid-template-columns: 18px 1fr;
+          column-gap: 12px;
+          align-items: start;
+          cursor: pointer;
+          width: 100%;
+        }
+        .study-checkbox-col {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          margin-top: 1px;
+        }
+        .study-checkbox {
+          width: 18px;
+          height: 18px;
+          accent-color: var(--accent-purple);
+          cursor: pointer;
+          margin: 0;
+          padding: 0;
+          flex-shrink: 0;
+        }
+        .study-consent-text {
+          font-family: var(--font-body);
+          font-size: 0.75rem;
+          line-height: 1.5;
+          color: var(--text-muted);
+          word-break: break-word;
+        }
+        .study-consent-strong {
+          color: var(--text-primary);
+          font-weight: 600;
+        }
+
+        /* ── Generate Button ── */
+        .study-generate-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          width: 100%;
+          height: 44px;
+          padding: 0 18px;
+          border-radius: var(--radius-md);
+          border: none;
+          background: var(--gradient-accent);
+          color: #ffffff;
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          cursor: pointer;
+          box-shadow: 0 4px 14px rgba(124, 109, 255, 0.35);
+          transition: opacity var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+        }
+        .study-generate-btn:hover:not(:disabled) {
+          box-shadow: 0 6px 20px rgba(124, 109, 255, 0.45);
+          transform: translateY(-1px);
+        }
+        .study-generate-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+        .study-spinner {
+          width: 18px;
+          height: 18px;
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        .study-error-alert {
+          padding: 12px 14px;
+          border-radius: var(--radius-md);
+          background: rgba(248, 113, 113, 0.12);
+          border: 1px solid rgba(248, 113, 113, 0.3);
+          color: var(--accent-bad);
+          font-size: 0.75rem;
+          line-height: 1.5;
+        }
+
+        /* ── Output Panel Column ── */
+        .study-output-panel {
+          display: flex;
+          flex-direction: column;
+          min-height: 520px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-xl);
+          padding: 24px;
+          box-shadow: var(--shadow-card);
+        }
+        .study-output-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding-bottom: 16px;
+          border-bottom: 1px solid var(--border-hairline);
+          flex-wrap: wrap;
+        }
+        .study-output-title-group {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .study-output-title {
+          font-family: var(--font-body);
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--text-primary);
+          line-height: 1;
+        }
+        .study-output-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px 12px;
+          border-radius: var(--radius-pill);
+          font-family: var(--font-body);
+          font-size: 0.6875rem;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          background: var(--accent-purple-dim);
+          border: 1px solid rgba(124, 109, 255, 0.35);
+          color: var(--accent-purple);
+          line-height: 1.2;
+          white-space: nowrap;
+        }
+        .study-copy-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          height: 30px;
+          padding: 0 12px;
+          border-radius: var(--radius-md);
+          background: var(--bg-inset);
+          border: 1px solid var(--border-default);
+          color: var(--text-primary);
+          font-family: var(--font-body);
+          font-size: 0.75rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background var(--transition-fast), border-color var(--transition-fast);
+        }
+        .study-copy-btn:hover {
+          background: var(--bg-elevated);
+          border-color: var(--border-strong);
+        }
+        .study-output-body {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          margin-top: 16px;
+          overflow-y: auto;
+        }
+        .study-result-prose {
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          line-height: 1.7;
+          color: var(--text-primary);
+          white-space: pre-wrap;
+        }
+
+        /* ── Empty State ── */
+        .study-empty-state {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          padding: 36px 20px;
+          min-height: 420px;
+        }
+        .study-empty-icon-wrap {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 52px;
+          height: 52px;
+          border-radius: var(--radius-xl);
+          background: var(--accent-purple-dim);
+          border: 1px solid rgba(124, 109, 255, 0.25);
+          color: var(--accent-purple);
+          margin-bottom: 16px;
+        }
+        .study-empty-icon {
+          width: 24px;
+          height: 24px;
+        }
+        .study-empty-heading {
+          font-family: var(--font-body);
+          font-size: 1.0625rem;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          color: var(--text-primary);
+          margin-top: 0;
+          margin-bottom: 8px;
+        }
+        .study-empty-desc {
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          color: var(--text-muted);
+          max-width: 380px;
+          line-height: 1.6;
+          margin-top: 0;
+          margin-bottom: 24px;
+        }
+        .study-empty-chips {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          max-width: 440px;
+        }
+        .study-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 6px 14px;
+          border-radius: var(--radius-pill);
+          background: var(--bg-inset);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-secondary);
+          font-family: var(--font-body);
+          font-size: 0.75rem;
+          font-weight: 500;
+          line-height: 1.3;
+        }
+      `}</style>
     </div>
   );
 }
