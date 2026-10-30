@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import {
   CONVERSION_PROFILES,
-  DEFAULT_CONVERSION_PROFILE,
+  getStoredConversionProfile,
+  getStoredCustomColor,
+  saveStoredConversionProfile,
+  saveStoredCustomColor,
   type ConversionProfileId,
 } from "@/lib/conversion-profiles";
 import {
@@ -39,6 +42,7 @@ interface BatchItem {
    * so changing the batch select still affects every unpinned item.
    */
   profile?: ConversionProfileId;
+  customColor?: string;
 }
 
 const CONCURRENCY = 2;
@@ -52,7 +56,8 @@ const ZIP_KEY = "zip";
 export function BatchUploadZone() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<BatchItem[]>([]);
-  const [profile, setProfile] = useState<ConversionProfileId>(DEFAULT_CONVERSION_PROFILE);
+  const [profile, setProfile] = useState<ConversionProfileId>(getStoredConversionProfile);
+  const [customColor, setCustomColor] = useState<string>(getStoredCustomColor);
   const [running, setRunning] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [zipUrl, setZipUrl] = useState<string | null>(null);
@@ -135,6 +140,10 @@ export function BatchUploadZone() {
         // Per-document override wins; otherwise the batch default applies at
         // start time, so late default changes still reach unpinned items.
         profile: item.profile ?? profile,
+        customColor:
+          (item.profile ?? profile) === "custom"
+            ? item.customColor ?? customColor
+            : undefined,
         signal: controller.signal,
         onStatusChange: (status: ConversionStatus) => {
           if (status === "processing") updateItem(item.id, { progress: 8, message: "Analysing document…" });
@@ -191,7 +200,7 @@ export function BatchUploadZone() {
       item.historyId ? { historyId: item.historyId } : {}
     );
     controllersRef.current.delete(item.id);
-  }, [profile, resources, updateItem]);
+  }, [customColor, profile, resources, updateItem]);
 
   const start = useCallback(async () => {
     if (running) return;
@@ -309,9 +318,33 @@ export function BatchUploadZone() {
           <button type="button" className="noctra-btn-secondary" onClick={() => inputRef.current?.click()}>Choose files</button>
           <label className="batch-profile">
             <span>Default theme</span>
-            <select value={profile} onChange={(event) => setProfile(event.target.value as ConversionProfileId)} disabled={running}>
-              {CONVERSION_PROFILES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            <select
+              value={profile}
+              onChange={(event) => {
+                const p = event.target.value as ConversionProfileId;
+                setProfile(p);
+                saveStoredConversionProfile(p);
+              }}
+              disabled={running}
+            >
+              {CONVERSION_PROFILES.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+            {profile === "custom" && (
+              <input
+                type="color"
+                value={customColor}
+                onChange={(e) => {
+                  setCustomColor(e.target.value);
+                  saveStoredCustomColor(e.target.value);
+                }}
+                className="batch-color-picker"
+                title="Default custom background color"
+              />
+            )}
           </label>
         </div>
       </div>
@@ -347,6 +380,19 @@ export function BatchUploadZone() {
                       ))}
                     </select>
                   )}
+                  {item.status === "queued" && (item.profile ?? profile) === "custom" && (
+                    <input
+                      type="color"
+                      value={item.customColor ?? customColor}
+                      onChange={(event) =>
+                        updateItem(item.id, {
+                          customColor: event.target.value,
+                        })
+                      }
+                      className="batch-item-color-picker"
+                      title={`Custom color for ${item.file.name}`}
+                    />
+                  )}
                   <span className={`batch-status batch-status--${item.status}`}>{item.message ?? item.status}</span>
                 </div>
                 {item.status === "processing" && <div className="batch-progress"><span style={{ width: `${item.progress}%` }} /></div>}
@@ -378,11 +424,13 @@ export function BatchUploadZone() {
         .batch-drop, .batch-panel { border: 1px solid var(--border-default); border-radius: var(--radius-xl); background: var(--bg-surface); }
         .batch-drop { display: grid; gap: 20px; padding: 24px; transition: border-color var(--transition-base), background var(--transition-base); }
         .batch-drop.is-dragging { border-color: var(--accent-purple); background: var(--accent-purple-dim); }
-        .batch-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.04em; text-transform: uppercase; }
+        .batch-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.015em; word-spacing: 0.12em; line-height: 1.25; text-transform: uppercase; }
         .batch-sub { max-width: 64ch; color: var(--text-secondary); font-size: .875rem; line-height: 1.55; margin-top: 6px; }
         .batch-actions, .batch-head, .batch-head-actions, .batch-footer { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .batch-profile { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: .75rem; }
         .batch-profile select { min-height: 42px; border: 1px solid var(--border-default); border-radius: var(--radius-pill); background: var(--bg-base); color: var(--text-primary); padding: 0 12px; font: inherit; }
+        .batch-color-picker { width: 36px; height: 36px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: transparent; cursor: pointer; padding: 0; }
+        .batch-item-color-picker { width: 28px; height: 28px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: transparent; cursor: pointer; padding: 0; margin-left: 6px; }
         .batch-panel { padding: 20px; }
         .batch-head { justify-content: space-between; color: var(--text-muted); font-size: .8125rem; }
         .batch-head strong { color: var(--text-primary); }

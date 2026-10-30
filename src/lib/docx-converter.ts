@@ -26,7 +26,8 @@ export async function convertDocxToDarkMode(
   onProgress?: (part: number, total: number) => void,
   profileId?: ConversionProfileId,
   signal?: AbortSignal,
-  onFinalizing?: (label: string) => void
+  onFinalizing?: (label: string) => void,
+  customColor?: string
 ): Promise<Uint8Array> {
   if (inputBuffer.byteLength === 0) {
     throw new Error("The DOCX file is empty.");
@@ -56,8 +57,8 @@ export async function convertDocxToDarkMode(
     if (!entry || entry.dir) continue;
     const xml = await entry.async("string");
     const transformed = /theme\/theme\d+\.xml$/i.test(name)
-      ? patchThemeXml(xml, profileId)
-      : patchWordXml(xml, profileId);
+      ? patchThemeXml(xml, profileId, customColor)
+      : patchWordXml(xml, profileId, customColor);
     zip.file(name, transformed);
     onProgress?.(index + 1, total);
   }
@@ -72,8 +73,12 @@ export async function convertDocxToDarkMode(
 }
 
 /** Apply conservative, context-aware replacements to editable OOXML. */
-export function patchWordXml(xml: string, profileId?: ConversionProfileId): string {
-  const profile = getConversionProfile(profileId);
+export function patchWordXml(
+  xml: string,
+  profileId?: ConversionProfileId,
+  customColor?: string
+): string {
+  const profile = getConversionProfile(profileId, customColor);
   let output = xml;
 
   // Section/document page backgrounds and Word shading use six-digit RGB.
@@ -120,8 +125,12 @@ function patchDrawingColors(xml: string, profile: ReturnType<typeof getConversio
   );
 }
 
-export function patchThemeXml(xml: string, profileId?: ConversionProfileId): string {
-  const profile = getConversionProfile(profileId);
+export function patchThemeXml(
+  xml: string,
+  profileId?: ConversionProfileId,
+  customColor?: string
+): string {
+  const profile = getConversionProfile(profileId, customColor);
   let output = xml;
   output = replaceThemeColor(output, "dk1", rgbToHex(profile.text));
   output = replaceThemeColor(output, "lt1", rgbToHex(profile.background));

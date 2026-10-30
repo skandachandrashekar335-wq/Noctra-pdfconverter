@@ -30,6 +30,7 @@ import {
 } from "./pdf-text-layer.ts";
 import {
   getConversionProfile,
+  getRelativeLuminance,
   type ConversionProfile,
   type ConversionProfileId,
 } from "./conversion-profiles.ts";
@@ -127,9 +128,10 @@ export async function convertPdfToDarkMode(
   profileId?: ConversionProfileId,
   signal?: AbortSignal,
   onFinalizing?: FinalizingReporter,
-  onPagePreview?: PagePreviewReporter
+  onPagePreview?: PagePreviewReporter,
+  customColor?: string
 ): Promise<PdfConversionResult> {
-  const profile = getConversionProfile(profileId);
+  const profile = getConversionProfile(profileId, customColor);
   // Lazy load to avoid SSR and keep initial bundle small
   const [pdfjsLib, { PDFDocument, StandardFonts }] = await Promise.all([
     import("pdfjs-dist"),
@@ -411,6 +413,11 @@ export function applyDarkTransform(
   stats?: PdfPixelStats
 ): void {
   if (stats) stats.total += data.length / 4;
+  const isLightBg = getRelativeLuminance(profile.background.r, profile.background.g, profile.background.b) >= 0.18;
+  const midR = isLightBg ? Math.round((profile.text.r + profile.surface.r) / 2) : 150;
+  const midG = isLightBg ? Math.round((profile.text.g + profile.surface.g) / 2) : 150;
+  const midB = isLightBg ? Math.round((profile.text.b + profile.surface.b) / 2) : 150;
+
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -436,17 +443,17 @@ export function applyDarkTransform(
         if (stats) stats.ink++;
         // Near-black text / ink → light text
         const t = brightness / 70;
-        data[i] = lerp(profile.text.r, 150, t);
-        data[i + 1] = lerp(profile.text.g, 150, t);
-        data[i + 2] = lerp(profile.text.b, 150, t);
+        data[i] = lerp(profile.text.r, midR, t);
+        data[i + 1] = lerp(profile.text.g, midG, t);
+        data[i + 2] = lerp(profile.text.b, midB, t);
       } else {
         if (stats) stats.midtone++;
         // Anti-aliased text and neutral mid-tones: ease into the dark surface
         // instead of crushing a narrow band into an unreadable grey.
         const t = (brightness - 70) / 110;
-        data[i] = lerp(150, profile.surface.r, t);
-        data[i + 1] = lerp(150, profile.surface.g, t);
-        data[i + 2] = lerp(150, profile.surface.b, t);
+        data[i] = lerp(midR, profile.surface.r, t);
+        data[i + 1] = lerp(midG, profile.surface.g, t);
+        data[i + 2] = lerp(midB, profile.surface.b, t);
       }
     } else {
       if (stats) stats.colourful++;

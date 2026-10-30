@@ -89,56 +89,59 @@ export function StudyStudio() {
   };
 
   return (
-    <div className="study-studio">
-      <div className="study-header">
-        <h2 className="text-xl font-bold text-white tracking-tight">AI Study Assistant</h2>
-        <p className="text-xs text-zinc-400 mt-1">
-          Generate grounded summaries, flashcards, exams, and revision plans from your study materials. Powered by Google Gemini.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
+    <div className="study-studio-root">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         {/* Controls form */}
-        <form onSubmit={handleGenerate} className="lg:col-span-5 space-y-4">
+        <form onSubmit={handleGenerate} className="lg:col-span-5 flex flex-col gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">
-              Select Study Objective
-            </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                Select Study Objective
+              </label>
+              <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
+                8 Formats
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {STUDY_TASKS.map((t) => (
                 <button
                   type="button"
                   key={t.id}
                   onClick={() => setTask(t.id)}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer min-h-[64px] flex flex-col justify-center ${
                     task === t.id
-                      ? "bg-purple-950/40 border-purple-500 text-white shadow-lg shadow-purple-950/50"
-                      : "bg-[#0f1115] border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                      ? "bg-purple-950/40 border-purple-500 text-white shadow-md shadow-purple-950/50 ring-1 ring-purple-500/40"
+                      : "bg-[#0f1115] border-zinc-800/90 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 hover:bg-[#14161c]"
                   }`}
                 >
-                  <p className="text-xs font-semibold leading-tight">{t.label}</p>
-                  <p className="text-[10px] text-zinc-500 mt-1 line-clamp-1">{t.desc}</p>
+                  <p className="text-xs font-semibold leading-tight text-zinc-100">{t.label}</p>
+                  <p className="text-[10.5px] text-zinc-400 mt-1 leading-snug break-words">{t.desc}</p>
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label htmlFor="study-text" className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-              Study Passages / Notes
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="study-text" className="block text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                Study Passages / Notes
+              </label>
+              <span className="text-[10px] text-zinc-500">
+                {text.length}/15,000
+              </span>
+            </div>
             <textarea
               id="study-text"
               rows={6}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Paste notes, textbook excerpts, or lecture slides here..."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-xs font-mono leading-relaxed resize-y"
+              placeholder="Paste lecture notes, textbook excerpts, or study material here..."
+              className="w-full px-4 py-3 rounded-xl bg-[#0f1115] border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 text-xs font-sans leading-relaxed resize-y min-h-[140px]"
             />
           </div>
 
           <div>
-            <label htmlFor="study-question" className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
+            <label htmlFor="study-question" className="block text-xs font-semibold uppercase tracking-wider text-zinc-300 mb-1.5">
               Specific Focus / Question (Optional)
             </label>
             <input
@@ -147,19 +150,19 @@ export function StudyStudio() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="e.g. Focus on memory hierarchy and cache coherence"
-              className="w-full px-3.5 py-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-xs"
+              className="w-full px-4 py-2.5 rounded-xl bg-[#0f1115] border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/60 text-xs"
             />
           </div>
 
-          <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/80">
-            <label className="flex items-start gap-2.5 cursor-pointer">
+          <div className="p-3.5 rounded-xl bg-[#0f1115] border border-zinc-800/80">
+            <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={consent}
                 onChange={(e) => setConsent(e.target.checked)}
                 className="mt-0.5 rounded border-zinc-700 text-purple-600 focus:ring-purple-500 cursor-pointer"
               />
-              <span className="text-[11px] text-zinc-400 leading-normal">
+              <span className="text-[11px] text-zinc-400 leading-relaxed">
                 <strong className="text-zinc-200">Explicit Privacy Consent:</strong> I authorize sending the supplied passages to Google Gemini to generate study aids. No personal credentials or original PDF files are transmitted.
               </span>
             </label>
@@ -168,7 +171,7 @@ export function StudyStudio() {
           <button
             type="submit"
             disabled={loading || !consent}
-            className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 disabled:opacity-50 text-white font-medium text-xs sm:text-sm transition-all shadow-lg shadow-purple-600/20 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:from-purple-700 active:to-indigo-700 disabled:opacity-40 text-white font-semibold text-xs uppercase tracking-wider transition-all shadow-lg shadow-purple-600/20 flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? (
               <>
@@ -184,43 +187,56 @@ export function StudyStudio() {
           </button>
 
           {error && (
-            <div role="alert" className="p-3 rounded-xl bg-red-950/40 border border-red-800/50 text-red-200 text-xs">
+            <div role="alert" className="p-3.5 rounded-xl bg-red-950/40 border border-red-800/50 text-red-200 text-xs leading-relaxed">
               {error}
             </div>
           )}
         </form>
 
         {/* Output display */}
-        <div className="lg:col-span-7 flex flex-col h-full min-h-[380px] bg-[#0f1115] border border-zinc-800/80 rounded-2xl p-5 shadow-inner">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              Generated Study Output
-            </span>
+        <div className="lg:col-span-7 flex flex-col min-h-[520px] bg-[#0f1115] border border-zinc-800/80 rounded-2xl p-5 sm:p-6 shadow-inner">
+          <div className="flex items-center justify-between pb-3.5 border-b border-zinc-800/80">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                Generated Study Output
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-purple-950/60 border border-purple-800/40 text-[10px] text-purple-300 uppercase tracking-wider font-semibold">
+                {STUDY_TASKS.find((t) => t.id === task)?.label ?? "Study Aid"}
+              </span>
+            </div>
             {result && (
               <button
                 type="button"
                 onClick={handleCopy}
-                className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors flex items-center gap-1.5 border border-zinc-700/60 cursor-pointer"
               >
-                {copied ? "Copied!" : "Copy Output"}
+                {copied ? "✓ Copied!" : "Copy Output"}
               </button>
             )}
           </div>
 
-          <div className="flex-1 mt-4 overflow-y-auto max-h-[500px]">
+          <div className="flex-1 mt-4 overflow-y-auto">
             {result ? (
-              <div className="prose prose-invert prose-zinc max-w-none text-xs leading-relaxed whitespace-pre-wrap font-sans text-zinc-200">
+              <div className="prose prose-invert prose-zinc max-w-none text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap font-sans text-zinc-200">
                 {result}
               </div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8 text-zinc-500">
-                <svg className="w-10 h-10 mb-3 opacity-40 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                <p className="text-sm font-medium text-zinc-400">Ready for Study Analysis</p>
-                <p className="text-xs text-zinc-600 max-w-xs mt-1">
-                  Paste notes on the left, pick an objective, and click generate to synthesize your materials.
+              <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 text-zinc-500">
+                <div className="w-12 h-12 rounded-2xl bg-purple-950/30 border border-purple-800/30 flex items-center justify-center mb-4 text-purple-400">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-zinc-200">Ready for Study Analysis</p>
+                <p className="text-xs text-zinc-400 max-w-sm mt-1.5 leading-relaxed">
+                  Paste textbook excerpts or lecture notes on the left, pick a study objective, and generate instant summaries, flashcards, and quizzes.
                 </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-5 text-[11px] text-zinc-400">
+                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">📖 Executive Summary</span>
+                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">🃏 Flashcards</span>
+                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">🎯 Practice Quiz</span>
+                  <span className="px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">⏱ Revision Plan</span>
+                </div>
               </div>
             )}
           </div>

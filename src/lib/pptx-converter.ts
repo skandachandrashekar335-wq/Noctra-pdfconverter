@@ -31,7 +31,8 @@ export async function convertPptxToDarkMode(
   onProgress?: (slide: number, total: number) => void,
   profileId?: ConversionProfileId,
   signal?: AbortSignal,
-  onFinalizing?: (label: string) => void
+  onFinalizing?: (label: string) => void,
+  customColor?: string
 ): Promise<Uint8Array> {
   if (inputBuffer.byteLength === 0) {
     throw new Error("The PPTX file is empty.");
@@ -50,7 +51,7 @@ export async function convertPptxToDarkMode(
     );
   }
 
-  const profile = getConversionProfile(profileId);
+  const profile = getConversionProfile(profileId, customColor);
   const palette = {
     background: rgbToHex(profile.background),
     surface: rgbToHex(profile.surface),

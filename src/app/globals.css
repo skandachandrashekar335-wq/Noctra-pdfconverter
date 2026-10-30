@@ -317,9 +317,37 @@ h3,
 h4 {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: -0.05em;
-  line-height: 0.9;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
   text-wrap: balance;
+  word-spacing: max(0.12em, 3px);
+}
+
+h1 {
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+h2 {
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+h3 {
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+}
+
+h4 {
+  letter-spacing: 0em;
+  line-height: 1.3;
+}
+
+/* Uppercase headings and labels get clean tracking and word spacing */
+.uppercase,
+[class*="uppercase"] {
+  letter-spacing: 0.06em;
+  word-spacing: max(0.22em, 4px);
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────────── */
@@ -492,25 +520,26 @@ h4 {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
+  padding: 3px;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   overflow: visible;
 }
 .theme-toggle-opt {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 5px 9px;
+  padding: 6px 12px;
   background: transparent;
   color: var(--text-muted);
   border: 1px solid transparent;
-  border-radius: calc(var(--radius-sm) - 1px);
+  border-radius: calc(var(--radius-md) - 2px);
   font-family: var(--font-body);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   text-transform: capitalize;
   cursor: pointer;
   white-space: nowrap;
@@ -523,8 +552,8 @@ h4 {
 .theme-toggle-opt.is-active {
   background: var(--bg-elevated);
   color: var(--text-primary);
-  border-color: var(--border-subtle);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border-color: var(--border-default);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 .theme-toggle-opt:focus-visible {
   outline: 2px solid var(--accent-purple);
@@ -545,10 +574,10 @@ h4 {
   padding: 6px 8px;
 }
 
-/* Dashboard sidebar: three clearly separated, vertically stacked rows */
+/* Dashboard sidebar: clean horizontal segmented grid */
 .dash-theme {
-  margin: 20px 0 8px;
-  padding-top: 16px;
+  margin: 16px 0 12px;
+  padding-top: 14px;
   border-top: 1px solid var(--border-hairline);
 }
 .dash-theme-caption {
@@ -560,32 +589,31 @@ h4 {
   text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 8px;
-  padding-left: 4px;
+  padding-left: 2px;
 }
 .dash-theme .theme-toggle {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
   width: 100%;
-  background: transparent;
-  border: none;
-  padding: 0;
-  border-radius: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  padding: 3px;
+  border-radius: var(--radius-md);
 }
 .dash-theme .theme-toggle-opt {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
+  justify-content: center;
+  gap: 5px;
   width: 100%;
-  padding: 8px 12px;
-  min-height: 34px;
+  padding: 6px 4px;
+  min-height: 32px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 .dash-theme .theme-toggle-opt:hover {
   background: var(--border-subtle);
@@ -593,28 +621,45 @@ h4 {
 }
 .dash-theme .theme-toggle-opt.is-active {
   background: var(--bg-elevated);
-  border-color: var(--border-subtle);
+  border-color: var(--border-default);
   color: var(--text-primary);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 .dash-theme .theme-toggle-opt.is-active::after {
-  content: "";
-  display: block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent-purple);
-  margin-left: auto;
+  display: none;
 }
 .dash-theme .theme-toggle-label {
   display: inline;
 }
 
+/* Settings page theme toggle container */
+.settings-theme-wrapper .theme-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 380px;
+  width: 100%;
+  padding: 4px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+.settings-theme-wrapper .theme-toggle-opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  min-height: 38px;
+  border-radius: calc(var(--radius-lg) - 4px);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
 /* Mobile responsive layout */
 @media (max-width: 768px) {
   .dash-theme {
-    margin: 0 12px 0 auto;
+    margin: 0;
     padding-top: 0;
     border-top: none;
   }
@@ -622,6 +667,7 @@ h4 {
     display: none;
   }
   .dash-theme .theme-toggle {
+    display: inline-flex;
     flex-direction: row;
     width: auto;
     gap: 2px;
@@ -635,9 +681,6 @@ h4 {
     padding: 5px 8px;
     min-height: auto;
     border: 1px solid transparent;
-  }
-  .dash-theme .theme-toggle-opt.is-active::after {
-    display: none;
   }
   .dash-theme .theme-toggle-label {
     display: none;

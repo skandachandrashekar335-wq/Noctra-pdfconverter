@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { OnboardingModal } from "@/components/OnboardingModal";
 import { getLandingCtaMode } from "@/lib/landing-cta";
 import {
   CONVERSION_PROFILES,
@@ -358,7 +357,6 @@ export default function LandingPage() {
 
   return (
     <div className="landing" ref={rootRef}>
-      <OnboardingModal />
       <a className="skip-link" href="#main">
         Skip to content
       </a>

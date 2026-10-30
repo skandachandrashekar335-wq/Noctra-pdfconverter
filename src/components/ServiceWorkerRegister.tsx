@@ -1,20 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+
+function subscribeNetwork(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function getClientSnapshot(): boolean {
+  return typeof navigator !== "undefined" ? !navigator.onLine : false;
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+export function useOfflineStatus(): boolean {
+  return useSyncExternalStore(subscribeNetwork, getClientSnapshot, getServerSnapshot);
+}
 
 export function ServiceWorkerRegister() {
-  const [isOffline, setIsOffline] = useState(() =>
-    typeof navigator !== "undefined" ? !navigator.onLine : false
-  );
+  const isOffline = useOfflineStatus();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
 
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker
@@ -35,23 +50,21 @@ export function ServiceWorkerRegister() {
           // Service worker registration ignored in environments that disallow it
         });
     }
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
   }, []);
 
-  if (!isOffline) return null;
+  // Suppress floating banner when on dashboard (dashboard has a dedicated sidebar status card)
+  if (!isOffline || pathname?.startsWith("/dashboard")) return null;
 
   return (
     <aside
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-zinc-900/95 border border-amber-500/40 text-amber-300 text-xs shadow-2xl backdrop-blur-md animate-fade-in"
+      className="pointer-events-none fixed top-3 left-0 right-0 z-50 flex justify-center px-4"
     >
-      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-      <span>Working Offline · Local document conversion and reader active</span>
+      <div className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#111115]/95 border border-amber-500/30 text-amber-300 text-xs shadow-lg backdrop-blur-md">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" aria-hidden="true" />
+        <span className="font-medium tracking-tight">Offline Mode · Local document conversion and reader active</span>
+      </div>
     </aside>
   );
 }

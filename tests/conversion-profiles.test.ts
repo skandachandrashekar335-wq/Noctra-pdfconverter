@@ -12,8 +12,16 @@ describe("conversion profiles", () => {
     assert.equal(getConversionProfile(undefined).id, "oled-black");
   });
 
-  test("exposes distinct opt-in palettes", () => {
-    assert.equal(CONVERSION_PROFILES.length, 4);
+  test("exposes distinct opt-in palettes and preserves the 4 original palettes", () => {
+    assert.equal(CONVERSION_PROFILES.length, 5);
+    const ids = CONVERSION_PROFILES.map((p) => p.id);
+    assert.deepEqual(ids, [
+      "oled-black",
+      "charcoal-dark",
+      "warm-sepia",
+      "low-contrast-night",
+      "custom",
+    ]);
     assert.notDeepEqual(
       getConversionProfile("warm-sepia").background,
       getConversionProfile("oled-black").background

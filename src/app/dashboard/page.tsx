@@ -7,7 +7,7 @@ import { ConversionList } from "@/components/ConversionList";
 import { BatchUploadZone } from "@/components/BatchUploadZone";
 import { StudyStudio } from "@/components/StudyStudio";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { OnboardingModal } from "@/components/OnboardingModal";
+import { useOfflineStatus } from "@/components/ServiceWorkerRegister";
 import { useAuth } from "@/hooks/useAuth";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,6 +22,7 @@ export default function DashboardPage() {
 
 function DashboardContent() {
   const { user, profile, signOut, deleteAccount, error, clearError, configError } = useAuth();
+  const isOffline = useOfflineStatus();
   const [activeTab, setActiveTab] = useState<"convert" | "library" | "study" | "settings">("convert");
   const [signingOut, setSigningOut] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -63,8 +64,6 @@ function DashboardContent() {
 
   return (
     <div className="dash-shell theme-dark">
-      <OnboardingModal />
-
       {/* ── Delete Account Confirmation Modal ────────────────────── */}
       {showDeleteModal && (
         <div
@@ -140,6 +139,21 @@ function DashboardContent() {
           <ThemeToggle />
         </div>
 
+        <div className="dash-status-block" role="status" aria-live="polite">
+          <span className="dash-theme-caption">Engine Status</span>
+          <div className={`dash-status-pill ${isOffline ? "is-offline" : "is-online"}`}>
+            <span className="dash-status-dot" aria-hidden="true" />
+            <div className="dash-status-info">
+              <span className="dash-status-title">
+                {isOffline ? "Working Offline" : "Local Engine Active"}
+              </span>
+              <span className="dash-status-desc">
+                {isOffline ? "Local conversion & reader ready" : "Zero document uploads"}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div className="dash-profile">
           {user?.photoURL ? (
             <Image
@@ -158,13 +172,15 @@ function DashboardContent() {
             </p>
             <p className="dash-profile-email">{profile?.email}</p>
             <button
+              type="button"
               onClick={() => setShowDeleteModal(true)}
-              className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors mt-0.5 cursor-pointer block"
+              className="dash-delete-link"
             >
               Delete account
             </button>
           </div>
           <button
+            type="button"
             onClick={handleSignOut}
             disabled={signingOut}
             className="dash-signout"
@@ -175,12 +191,12 @@ function DashboardContent() {
           </button>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-500">
-          <Link href="/privacy" className="hover:text-zinc-300 transition-colors">
+        <div className="dash-sidebar-footer">
+          <Link href="/privacy" className="dash-footer-link">
             Privacy
           </Link>
-          <span>•</span>
-          <Link href="/terms" className="hover:text-zinc-300 transition-colors">
+          <span className="dash-footer-dot">•</span>
+          <Link href="/terms" className="dash-footer-link">
             Terms
           </Link>
         </div>
@@ -192,9 +208,51 @@ function DashboardContent() {
         )}
       </aside>
 
+      {/* ── Mobile Tab Navigation (Fixed bottom bar on small viewports) ── */}
+      <nav className="dash-mobile-nav" aria-label="Mobile navigation">
+        <button
+          type="button"
+          className={`dash-mobile-tab ${activeTab === "convert" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("convert")}
+        >
+          <UploadNavIcon />
+          <span>Convert</span>
+        </button>
+        <button
+          type="button"
+          className={`dash-mobile-tab ${activeTab === "library" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("library")}
+        >
+          <HistoryNavIcon />
+          <span>Library</span>
+        </button>
+        <button
+          type="button"
+          className={`dash-mobile-tab ${activeTab === "study" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("study")}
+        >
+          <StudyNavIcon />
+          <span>Study AI</span>
+        </button>
+        <button
+          type="button"
+          className={`dash-mobile-tab ${activeTab === "settings" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+        >
+          <SettingsNavIcon />
+          <span>Settings</span>
+        </button>
+      </nav>
+
       {/* ── Main ────────────────────────────────────────────────── */}
       <main className="dash-main">
         <div className="dash-main-inner">
+          {isOffline && (
+            <div className="dash-mobile-offline-banner" role="status" aria-live="polite">
+              <span className="dash-status-dot is-offline-dot" aria-hidden="true" />
+              <span>Working Offline · Local document conversion and reader ready</span>
+            </div>
+          )}
           {activeTab === "convert" && (
             <>
               <header className="dash-header">
@@ -279,51 +337,56 @@ function DashboardContent() {
                 </p>
               </header>
 
-              <section className="grid gap-6 max-w-2xl" aria-label="Settings options">
-                <div className="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
-                  <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wider mb-2">
+              <section className="grid gap-6 max-w-3xl" aria-label="Settings options">
+                <div className="p-6 sm:p-7 rounded-2xl bg-[#0f1115] border border-zinc-800/80">
+                  <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider mb-2">
                     Interface Theme
                   </h3>
-                  <p className="text-xs text-zinc-400 mb-4">
+                  <p className="text-xs text-zinc-400 mb-5 leading-relaxed max-w-xl">
                     Choose how Noctra looks across your devices. System mode matches your OS preference automatically.
                   </p>
-                  <ThemeToggle />
+                  <div className="settings-theme-wrapper">
+                    <ThemeToggle />
+                  </div>
                 </div>
 
-                <div className="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
-                  <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wider mb-2">
+                <div className="p-6 sm:p-7 rounded-2xl bg-[#0f1115] border border-zinc-800/80">
+                  <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider mb-2">
                     Security &amp; Document Privacy
                   </h3>
-                  <div className="space-y-3 text-xs text-zinc-300 leading-relaxed">
+                  <div className="space-y-4 text-xs text-zinc-300 leading-relaxed max-w-2xl">
                     <p>
-                      <strong>Zero-Server Document Processing:</strong> In local-first mode, all PDF, DOCX, and PPTX conversions are performed in your browser&apos;s Web Worker memory. Your original document contents never leave your device unless you explicitly opt into the AI Study Assistant.
+                      <strong className="text-zinc-100 font-semibold">Zero-Server Document Processing:</strong> In local-first mode, all PDF, DOCX, and PPTX conversions are performed in your browser&apos;s Web Worker memory. Your original document contents never leave your device unless you explicitly opt into the AI Study Assistant.
                     </p>
                     <p>
-                      <strong>100% User Ownership:</strong> You retain complete, unrestricted copyright and ownership over all uploaded, converted, and exported documents.
+                      <strong className="text-zinc-100 font-semibold">100% User Ownership:</strong> You retain complete, unrestricted copyright and ownership over all uploaded, converted, and exported documents.
                     </p>
-                    <div className="flex gap-4 pt-2">
-                      <Link href="/privacy" className="text-indigo-400 hover:underline">
-                        Read Privacy Policy
+                    <div className="flex items-center gap-6 pt-2 text-xs">
+                      <Link href="/privacy" className="text-purple-400 hover:text-purple-300 transition-colors inline-flex items-center gap-1 font-medium">
+                        Read Privacy Policy <span>→</span>
                       </Link>
-                      <Link href="/terms" className="text-indigo-400 hover:underline">
-                        Read Terms of Service
+                      <Link href="/terms" className="text-purple-400 hover:text-purple-300 transition-colors inline-flex items-center gap-1 font-medium">
+                        Read Terms of Service <span>→</span>
                       </Link>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-6 rounded-2xl bg-zinc-900/60 border border-red-900/30">
-                  <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-2">
+                <div className="p-6 sm:p-7 rounded-2xl bg-[#140b0d] border border-red-900/40">
+                  <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">
                     Danger Zone
                   </h3>
-                  <p className="text-xs text-zinc-400 mb-4">
-                    Permanently delete your account and all associated conversion records, reader annotations, and tags.
+                  <p className="text-xs text-zinc-400 mb-5 leading-relaxed max-w-xl">
+                    Permanently delete your account and all associated conversion records, reader annotations, and tags. This action cannot be reversed.
                   </p>
                   <button
                     type="button"
                     onClick={() => setShowDeleteModal(true)}
-                    className="px-4 py-2 text-xs font-semibold text-white bg-red-600/90 hover:bg-red-600 rounded-lg transition-colors cursor-pointer"
+                    className="px-5 py-2.5 text-xs font-semibold text-red-200 hover:text-white bg-red-950/60 hover:bg-red-900/80 border border-red-800/60 hover:border-red-600 rounded-xl transition-all shadow-sm cursor-pointer inline-flex items-center gap-2"
                   >
+                    <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
                     Delete My Account &amp; Data
                   </button>
                 </div>
@@ -339,36 +402,104 @@ function DashboardContent() {
           min-height: 100vh;
           background: var(--bg-base);
           color: var(--text-primary);
+          position: relative;
         }
 
         /* ── Sidebar ── */
         .dash-sidebar {
-          width: 248px;
+          width: 256px;
           flex-shrink: 0;
           display: flex;
           flex-direction: column;
           border-right: 1px solid var(--border-hairline);
-          padding: 28px 20px;
+          padding: 24px 18px;
           position: sticky;
           top: 0;
           height: 100vh;
           overflow-y: auto;
+          background: var(--bg-base);
+          z-index: 30;
         }
+
+        /* ── Logo ── */
         .dash-logo {
-          display: inline-flex;
+          display: flex;
           align-items: center;
+          gap: 12px;
           text-decoration: none;
-          padding-bottom: 24px;
-          margin-bottom: 24px;
+          padding-bottom: 20px;
+          margin-bottom: 18px;
           border-bottom: 1px solid var(--border-hairline);
         }
 
-        /* ── Nav ── */
+        /* ── Navigation ── */
         .dash-nav {
           display: flex;
           flex-direction: column;
-          gap: 2px;
-          flex: 1;
+          gap: 4px;
+        }
+
+        /* ── Engine Status Block ── */
+        .dash-status-block {
+          margin: 14px 0 6px;
+        }
+        .dash-status-pill {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 10px;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          transition: border-color var(--transition-fast), background var(--transition-fast);
+        }
+        .dash-status-pill.is-offline {
+          border-color: rgba(245, 158, 11, 0.4);
+          background: rgba(245, 158, 11, 0.08);
+        }
+        .dash-status-pill.is-online {
+          border-color: var(--border-subtle);
+          background: var(--bg-inset);
+        }
+        .dash-status-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .dash-status-pill.is-offline .dash-status-dot {
+          background: #f59e0b;
+          box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+        }
+        .dash-status-pill.is-online .dash-status-dot {
+          background: #34d399;
+        }
+        .dash-status-info {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+        .dash-status-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          line-height: 1.2;
+        }
+        .dash-status-pill.is-offline .dash-status-title {
+          color: #fbbf24;
+        }
+        .dash-status-desc {
+          font-size: 0.625rem;
+          color: var(--text-muted);
+          line-height: 1.2;
+          margin-top: 2px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .dash-mobile-offline-banner {
+          display: none;
         }
 
         /* ── Profile ── */
@@ -376,7 +507,7 @@ function DashboardContent() {
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 18px 0 0;
+          padding: 16px 0 0;
           border-top: 1px solid var(--border-hairline);
           margin-top: auto;
         }
@@ -390,11 +521,12 @@ function DashboardContent() {
         }
         .dash-profile-name {
           font-size: 0.8125rem;
-          font-weight: 500;
+          font-weight: 600;
           color: var(--text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          line-height: 1.2;
         }
         .dash-profile-email {
           font-size: 0.6875rem;
@@ -403,6 +535,21 @@ function DashboardContent() {
           overflow: hidden;
           text-overflow: ellipsis;
           margin-top: 1px;
+          line-height: 1.2;
+        }
+        .dash-delete-link {
+          display: block;
+          margin-top: 3px;
+          background: none;
+          border: none;
+          padding: 0;
+          font-size: 0.625rem;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: color var(--transition-fast);
+        }
+        .dash-delete-link:hover {
+          color: var(--accent-bad);
         }
         .dash-signout {
           flex-shrink: 0;
@@ -429,6 +576,29 @@ function DashboardContent() {
           opacity: 0.5;
           cursor: not-allowed;
         }
+
+        /* ── Sidebar Footer ── */
+        .dash-sidebar-footer {
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px solid var(--border-subtle);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 0.6875rem;
+          color: var(--text-muted);
+        }
+        :global(.dash-footer-link) {
+          color: var(--text-muted);
+          text-decoration: none;
+          transition: color var(--transition-fast);
+        }
+        :global(.dash-footer-link:hover) {
+          color: var(--text-secondary);
+        }
+        .dash-footer-dot {
+          opacity: 0.4;
+        }
         .dash-auth-error {
           margin-top: 10px;
           font-size: 0.75rem;
@@ -436,42 +606,48 @@ function DashboardContent() {
           color: var(--accent-bad);
         }
 
-        /* ── Main ── */
+        /* ── Mobile Navigation ── */
+        .dash-mobile-nav {
+          display: none;
+        }
+
+        /* ── Main Workspace ── */
         .dash-main {
           flex: 1;
           min-width: 0;
           overflow-y: auto;
         }
         .dash-main-inner {
-          max-width: 880px;
+          max-width: 1200px;
           margin: 0 auto;
-          padding: clamp(32px, 5vw, 64px) clamp(20px, 4vw, 40px);
+          padding: clamp(28px, 4vw, 56px) clamp(20px, 4vw, 48px);
           display: flex;
           flex-direction: column;
-          gap: clamp(36px, 5vw, 56px);
+          gap: clamp(32px, 4vw, 48px);
         }
 
         /* ── Header ── */
         .dash-eyebrow {
           font-size: 0.6875rem;
           font-weight: 700;
-          letter-spacing: 0.24em;
+          letter-spacing: 0.18em;
           text-transform: uppercase;
           color: var(--text-muted);
-          margin-bottom: 14px;
+          margin-bottom: 10px;
         }
         .dash-title {
           font-family: var(--font-display);
           font-weight: 700;
-          font-size: clamp(2.25rem, 6vw, 4.25rem);
-          line-height: 0.9;
-          letter-spacing: -0.05em;
+          font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+          line-height: 1.15;
+          letter-spacing: -0.015em;
+          word-spacing: 0.12em;
           text-transform: uppercase;
           color: var(--text-primary);
         }
         .dash-sub {
-          margin-top: 16px;
-          max-width: 46ch;
+          margin-top: 12px;
+          max-width: 60ch;
           font-size: 0.9375rem;
           line-height: 1.6;
           color: var(--text-secondary);
@@ -488,7 +664,7 @@ function DashboardContent() {
           font-family: var(--font-body);
           font-size: 0.6875rem;
           font-weight: 700;
-          letter-spacing: 0.24em;
+          letter-spacing: 0.2em;
           text-transform: uppercase;
           color: var(--text-muted);
           white-space: nowrap;
@@ -499,39 +675,172 @@ function DashboardContent() {
           background: var(--border-hairline);
         }
 
-        /* ── Mobile: collapse sidebar ── */
+        /* ── Navigation Items (Standardized across button / a / span) ── */
+        :global(.nav-item) {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          min-height: 42px;
+          padding: 9px 12px;
+          border: 1px solid transparent;
+          border-radius: var(--radius-md);
+          background: transparent;
+          color: var(--text-secondary);
+          font-family: var(--font-body);
+          font-size: 0.8125rem;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          text-align: left;
+          text-decoration: none;
+          cursor: pointer;
+          position: relative;
+          transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+        }
+        :global(.nav-item:hover) {
+          background: var(--bg-elevated);
+          color: var(--text-primary);
+          border-color: var(--border-subtle);
+        }
+        :global(.nav-item.is-active) {
+          background: var(--accent-purple-dim);
+          border-color: rgba(124, 109, 255, 0.35);
+          color: var(--text-primary);
+          font-weight: 700;
+        }
+        :global(.nav-item .nav-icon) {
+          width: 20px;
+          height: 20px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          color: currentColor;
+        }
+        :global(.nav-item .nav-label) {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          line-height: 1;
+        }
+        :global(.nav-item.is-active .nav-active-pill) {
+          width: 4px;
+          height: 14px;
+          border-radius: var(--radius-pill);
+          background: var(--accent-purple);
+          margin-left: auto;
+          flex-shrink: 0;
+        }
+
+        /* ── Responsive Mobile & Tablet Shell ── */
         @media (max-width: 768px) {
           .dash-shell {
             flex-direction: column;
+            padding-bottom: 72px; /* space for fixed mobile bottom nav */
           }
           .dash-sidebar {
             width: 100%;
             height: auto;
-            position: static;
+            position: sticky;
+            top: 0;
+            z-index: 40;
             flex-direction: row;
             align-items: center;
-            padding: 12px 20px;
+            justify-content: space-between;
+            padding: 10px 16px;
             border-right: none;
             border-bottom: 1px solid var(--border-hairline);
+            background: var(--bg-base);
           }
           .dash-logo {
             padding-bottom: 0;
             margin-bottom: 0;
-            margin-right: auto;
             border-bottom: none;
           }
           .dash-nav {
-            flex-direction: row;
-            flex: 0 0 auto;
-            margin-right: 8px;
+            display: none;
+          }
+          .dash-theme {
+            margin: 0;
+            padding: 0;
+            border: none;
+          }
+          .dash-status-block {
+            display: none;
+          }
+          .dash-mobile-offline-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 12px;
+            margin-bottom: 16px;
+            border-radius: var(--radius-md);
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            color: #fbbf24;
+            font-size: 0.75rem;
+            font-weight: 500;
+          }
+          .dash-mobile-offline-banner .is-offline-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #f59e0b;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
           }
           .dash-profile {
             border-top: none;
             margin-top: 0;
             padding: 0;
+            gap: 8px;
           }
           .dash-profile-info {
             display: none;
+          }
+          .dash-sidebar-footer {
+            display: none;
+          }
+
+          /* Mobile bottom tab bar */
+          .dash-mobile-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100vw;
+            max-width: 100%;
+            z-index: 50;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border-hairline);
+            padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+            box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+            box-sizing: border-box;
+          }
+          :global(.dash-mobile-tab) {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 6px 2px;
+            border-radius: var(--radius-md);
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.6875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: color var(--transition-fast), background var(--transition-fast);
+          }
+          :global(.dash-mobile-tab.is-active) {
+            color: var(--text-primary);
+            background: var(--accent-purple-dim);
           }
         }
       `}</style>
@@ -552,43 +861,42 @@ function NavItem({
   href?: string;
   onClick?: () => void;
 }) {
-  const inner = (
+  const content = (
     <>
       <span className="nav-icon" aria-hidden="true">
         {icon}
       </span>
       <span className="nav-label">{label}</span>
+      {active && <span className="nav-active-pill" aria-hidden="true" />}
     </>
   );
+
+  const className = `nav-item ${active ? "is-active" : ""}`;
 
   if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className={`nav-item ${active ? "active" : ""}`}
+        className={className}
         aria-current={active ? "page" : undefined}
       >
-        {inner}
+        {content}
       </button>
     );
   }
 
-  // The current page is a non-interactive marker; anything with an href is a
-  // real link so navigation never dead-ends in a do-nothing button.
   if (href) {
     return (
       <a
         href={href}
-        className="nav-item"
+        className={className}
         onClick={(e) => {
-          // Same-page anchor: scroll smoothly without a full navigation.
           const target = document.querySelector(href);
           if (target) {
             e.preventDefault();
             target.scrollIntoView({
-              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-                .matches
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
                 ? "auto"
                 : "smooth",
               block: "start",
@@ -596,93 +904,14 @@ function NavItem({
           }
         }}
       >
-        {inner}
-        <style jsx>{`
-          .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            width: 100%;
-            padding: 11px 12px;
-            border: none;
-            border-left: 2px solid transparent;
-            border-radius: 0;
-            background: transparent;
-            color: var(--text-muted);
-            font-family: var(--font-body);
-            font-size: 0.75rem;
-            font-weight: 700;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            text-align: left;
-            text-decoration: none;
-            cursor: pointer;
-            transition: color var(--transition-fast),
-              background var(--transition-fast),
-              border-color var(--transition-fast);
-          }
-          .nav-item:hover {
-            background: var(--bg-elevated);
-            color: var(--text-primary);
-          }
-          .nav-icon {
-            flex-shrink: 0;
-            display: inline-flex;
-          }
-          .nav-label {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          }
-        `}</style>
+        {content}
       </a>
     );
   }
 
   return (
-    <span
-      className={`nav-item ${active ? "active" : ""}`}
-      aria-current={active ? "page" : undefined}
-    >
-      {inner}
-      <style jsx>{`
-        .nav-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          width: 100%;
-          padding: 11px 12px;
-          border: none;
-          border-left: 2px solid transparent;
-          border-radius: 0;
-          background: transparent;
-          color: var(--text-muted);
-          font-family: var(--font-body);
-          font-size: 0.75rem;
-          font-weight: 700;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          text-align: left;
-          cursor: pointer;
-          transition: color var(--transition-fast),
-            background var(--transition-fast),
-            border-color var(--transition-fast);
-        }
-        .nav-item.active {
-          border-left-color: var(--accent-purple);
-          color: var(--text-primary);
-          background: var(--accent-purple-dim);
-        }
-        .nav-icon {
-          flex-shrink: 0;
-          display: inline-flex;
-        }
-        .nav-label {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-      `}</style>
+    <span className={className} aria-current={active ? "page" : undefined}>
+      {content}
     </span>
   );
 }
@@ -736,8 +965,8 @@ function NoctraLogo() {
         style={{
           fontFamily: "var(--font-display)",
           fontWeight: 700,
-          fontSize: "1.0625rem",
-          letterSpacing: "-0.05em",
+          fontSize: "1.125rem",
+          letterSpacing: "-0.02em",
           textTransform: "uppercase",
           color: "var(--text-primary)",
         }}

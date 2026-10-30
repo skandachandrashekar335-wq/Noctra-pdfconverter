@@ -80,6 +80,7 @@ export const DEFAULT_VALIDATION_TIMEOUT_MS = 30_000;
 
 export interface ConversionCallbacks {
   profile?: ConversionProfileId;
+  customColor?: string;
   signal?: AbortSignal;
   onStatusChange?: (status: ConversionStatus) => void;
   /**
@@ -134,6 +135,7 @@ export interface ConverterHandlers {
   onFinalizing: (label: string) => void;
   onPagePreview?: (page: number, total: number, preview: PagePreview) => void;
   profile?: ConversionProfileId;
+  customColor?: string;
   signal: AbortSignal;
 }
 
@@ -144,6 +146,7 @@ export interface ConverterHandlers {
 export interface ConversionQualityReport {
   profileId: ConversionProfileId;
   profileLabel: string;
+  customColor?: string;
   pages: number;
   /** Share of all pixels remapped to the dark background (paper → dark). */
   darkenedPct: number;
@@ -230,14 +233,16 @@ const defaultConverter: ConverterFn = async (fileType, buffer, handlers) => {
       handlers.profile,
       handlers.signal,
       handlers.onFinalizing,
-      handlers.onPagePreview
+      handlers.onPagePreview,
+      handlers.customColor
     );
     const { stats, pages, profileId } = converted;
     const pct = (count: number) =>
       stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
     const quality: ConversionQualityReport = {
       profileId,
-      profileLabel: getConversionProfile(profileId).label,
+      profileLabel: getConversionProfile(profileId, handlers.customColor).label,
+      customColor: profileId === "custom" ? handlers.customColor : undefined,
       pages,
       darkenedPct: pct(stats.paper),
       textPct: pct(stats.ink),
@@ -258,7 +263,8 @@ const defaultConverter: ConverterFn = async (fileType, buffer, handlers) => {
       track,
       handlers.profile,
       handlers.signal,
-      handlers.onFinalizing
+      handlers.onFinalizing,
+      handlers.customColor
     );
     return {
       bytes,
@@ -273,7 +279,8 @@ const defaultConverter: ConverterFn = async (fileType, buffer, handlers) => {
     track,
     handlers.profile,
     handlers.signal,
-    handlers.onFinalizing
+    handlers.onFinalizing,
+    handlers.customColor
   );
   return {
     bytes,
@@ -519,6 +526,7 @@ export async function runConversion(
           ensureFinalizing(label);
         },
         profile: callbacks.profile,
+        customColor: callbacks.customColor,
         signal: controller.signal,
       });
     } catch (error) {

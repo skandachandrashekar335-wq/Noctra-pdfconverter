@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   runConversion,
@@ -14,6 +14,17 @@ import { revokeObjectUrl } from "@/lib/temp-resources";
 import {
   CONVERSION_PROFILES,
   DEFAULT_CONVERSION_PROFILE,
+  DEFAULT_CUSTOM_COLOR,
+  PRESET_CUSTOM_COLORS,
+  createCustomProfile,
+  getContrastRatio,
+  getRelativeLuminance,
+  getStoredConversionProfile,
+  getStoredCustomColor,
+  isValidHexColor,
+  normalizeHexColor,
+  saveStoredConversionProfile,
+  saveStoredCustomColor,
   type ConversionProfileId,
 } from "@/lib/conversion-profiles";
 import type { ConversionQualityReport } from "@/lib/conversion";
@@ -97,9 +108,57 @@ export function UploadZone({
   // Dark-mode palette applied to this conversion (same pipeline the batch
   // workspace uses). Changing it never touches a finished result — the next
   // conversion picks it up.
-  const [profile, setProfile] = useState<ConversionProfileId>(
-    DEFAULT_CONVERSION_PROFILE
-  );
+  const [profile, setProfile] = useState<ConversionProfileId>(getStoredConversionProfile);
+  const [customColor, setCustomColor] = useState<string>(getStoredCustomColor);
+  const [customHexInput, setCustomHexInput] = useState<string>(getStoredCustomColor);
+
+  const customProfile = useMemo(() => createCustomProfile(customColor), [customColor]);
+
+  const contrastStats = useMemo(() => {
+    const bgLum = getRelativeLuminance(
+      customProfile.background.r,
+      customProfile.background.g,
+      customProfile.background.b
+    );
+    const textLum = getRelativeLuminance(
+      customProfile.text.r,
+      customProfile.text.g,
+      customProfile.text.b
+    );
+    const ratio = getContrastRatio(bgLum, textLum);
+    return {
+      ratio,
+      isLowContrast: ratio < 4.5,
+      isHighContrast: ratio >= 7.0,
+      textColor: `rgb(${customProfile.text.r} ${customProfile.text.g} ${customProfile.text.b})`,
+      bgColor: `rgb(${customProfile.background.r} ${customProfile.background.g} ${customProfile.background.b})`,
+    };
+  }, [customProfile]);
+
+  const handleSelectProfile = useCallback((id: ConversionProfileId) => {
+    setProfile(id);
+    saveStoredConversionProfile(id);
+  }, []);
+
+  const handleSelectCustomColor = useCallback((hex: string) => {
+    const normalized = normalizeHexColor(hex);
+    setCustomColor(normalized);
+    setCustomHexInput(normalized);
+    saveStoredCustomColor(normalized);
+  }, []);
+
+  const handleHexInputChange = useCallback((val: string) => {
+    setCustomHexInput(val);
+    if (isValidHexColor(val)) {
+      const normalized = normalizeHexColor(val);
+      setCustomColor(normalized);
+      saveStoredCustomColor(normalized);
+    }
+  }, []);
+
+  const handleResetCustomColor = useCallback(() => {
+    handleSelectCustomColor(DEFAULT_CUSTOM_COLOR);
+  }, [handleSelectCustomColor]);
   const conversionControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   // Kept for the retry path: the last file attempted, and the history record
@@ -177,6 +236,7 @@ export function UploadZone({
         {
           signal: controller.signal,
           profile,
+          customColor: profile === "custom" ? customColor : undefined,
           onPhase: (phase) => {
             if (conversionControllerRef.current !== controller) return;
             // Terminal phases arrive through onComplete/onError/onCancelled
@@ -339,7 +399,7 @@ export function UploadZone({
         retryHistoryId ? { historyId: retryHistoryId } : {}
       );
     },
-    [bypassAuth, onConversionSettled, profile, releaseCurrentResources, resources, user]
+    [bypassAuth, customColor, onConversionSettled, profile, releaseCurrentResources, resources, user]
   );
 
   // ─── Drag feedback (small, decorative only) ────────────────────────────
@@ -483,12 +543,18 @@ export function UploadZone({
               select never triggers the file picker. */}
           <div className="profile-block">
             <div className="profile-head">
-              <span className="profile-label">Dark theme</span>
+              <span className="profile-label">Conversion theme</span>
               <button
                 type="button"
                 className="profile-reset"
-                onClick={() => setProfile(DEFAULT_CONVERSION_PROFILE)}
-                disabled={profile === DEFAULT_CONVERSION_PROFILE}
+                onClick={() => {
+                  handleSelectProfile(DEFAULT_CONVERSION_PROFILE);
+                  handleResetCustomColor();
+                }}
+                disabled={
+                  profile === DEFAULT_CONVERSION_PROFILE &&
+                  customColor.toLowerCase() === DEFAULT_CUSTOM_COLOR.toLowerCase()
+                }
               >
                 Reset
               </button>
@@ -496,10 +562,14 @@ export function UploadZone({
             <div
               className="profile-options"
               role="radiogroup"
-              aria-label="Dark theme applied to the conversion"
+              aria-label="Palette applied to the conversion"
             >
               {CONVERSION_PROFILES.map((p) => {
                 const active = p.id === profile;
+                const bgRgb = p.id === "custom" ? customProfile.background : p.background;
+                const surfaceRgb = p.id === "custom" ? customProfile.surface : p.surface;
+                const accentRgb = p.id === "custom" ? customProfile.accent : p.accent;
+
                 return (
                   <button
                     key={p.id}
@@ -507,33 +577,123 @@ export function UploadZone({
                     role="radio"
                     aria-checked={active}
                     className={`profile-option ${active ? "is-active" : ""}`}
-                    onClick={() => setProfile(p.id)}
+                    onClick={() => handleSelectProfile(p.id)}
                   >
                     <span
                       className="profile-swatch"
                       aria-hidden="true"
                       style={{
-                        background: `rgb(${p.background.r} ${p.background.g} ${p.background.b})`,
-                        borderColor: `rgb(${p.surface.r} ${p.surface.g} ${p.surface.b})`,
+                        background: `rgb(${bgRgb.r} ${bgRgb.g} ${bgRgb.b})`,
+                        borderColor: `rgb(${surfaceRgb.r} ${surfaceRgb.g} ${surfaceRgb.b})`,
                       }}
                     >
                       <span
                         className="profile-swatch-dot"
                         style={{
-                          background: `rgb(${p.accent.r} ${p.accent.g} ${p.accent.b})`,
+                          background: `rgb(${accentRgb.r} ${accentRgb.g} ${accentRgb.b})`,
                         }}
                       />
                     </span>
                     <span className="profile-option-text">
                       <span className="profile-option-label">{p.label}</span>
                       <span className="profile-option-desc">
-                        {p.description}
+                        {p.id === "custom"
+                          ? `Personalized background (${customColor.toUpperCase()}).`
+                          : p.description}
                       </span>
                     </span>
                   </button>
                 );
               })}
             </div>
+
+            {/* Custom Color Control Panel */}
+            {profile === "custom" && (
+              <div className="custom-color-panel" aria-label="Custom background color controls">
+                <div className="custom-color-row">
+                  <div className="custom-picker-group">
+                    <label htmlFor="custom-color-picker" className="custom-picker-label">
+                      Background Color
+                    </label>
+                    <div className="custom-input-wrap">
+                      <input
+                        id="custom-color-picker"
+                        type="color"
+                        value={customColor}
+                        onChange={(e) => handleSelectCustomColor(e.target.value)}
+                        className="custom-color-input"
+                        title="Choose custom background color"
+                      />
+                      <input
+                        type="text"
+                        value={customHexInput}
+                        onChange={(e) => handleHexInputChange(e.target.value)}
+                        placeholder="#E6E6FA"
+                        maxLength={7}
+                        className="custom-hex-input"
+                        aria-label="Hex color value"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="custom-preview-group">
+                    <div
+                      className="custom-live-preview"
+                      style={{
+                        backgroundColor: contrastStats.bgColor,
+                        color: contrastStats.textColor,
+                      }}
+                    >
+                      <span>Readable Study Text</span>
+                      <span className="custom-ratio-tag">
+                        {contrastStats.ratio}:1 {contrastStats.isHighContrast ? "AAA" : contrastStats.isLowContrast ? "Low" : "AA"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetCustomColor}
+                      className="custom-color-reset"
+                      title="Reset to default lavender"
+                    >
+                      Reset color
+                    </button>
+                  </div>
+                </div>
+
+                {contrastStats.isLowContrast && (
+                  <div className="custom-contrast-warn" role="alert">
+                    <span aria-hidden="true">⚠️</span>
+                    <span>
+                      Low contrast ({contrastStats.ratio}:1). Text may be harder to read on this background. Recommended contrast is at least 4.5:1.
+                    </span>
+                  </div>
+                )}
+
+                <div className="custom-presets">
+                  <span className="custom-presets-title">Quick Study Palettes:</span>
+                  <div className="custom-swatches" role="group" aria-label="Preset color swatches">
+                    {PRESET_CUSTOM_COLORS.map((preset) => {
+                      const isSelected = preset.hex.toLowerCase() === customColor.toLowerCase();
+                      return (
+                        <button
+                          key={preset.hex}
+                          type="button"
+                          onClick={() => handleSelectCustomColor(preset.hex)}
+                          className={`custom-preset-pill ${isSelected ? "is-active" : ""}`}
+                          title={`${preset.label} (${preset.hex})`}
+                        >
+                          <span
+                            className="custom-preset-dot"
+                            style={{ backgroundColor: preset.hex }}
+                          />
+                          <span>{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -642,7 +802,21 @@ export function UploadZone({
               <dl>
                 <div>
                   <dt>Theme</dt>
-                  <dd>{state.quality.profileLabel}</dd>
+                  <dd>
+                    {state.quality.profileLabel}
+                    {state.quality.customColor && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          color: "var(--accent-purple)",
+                        }}
+                      >
+                        ({state.quality.customColor.toUpperCase()})
+                      </span>
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>Pages</dt>
@@ -825,6 +999,178 @@ export function UploadZone({
           }
         }
 
+        /* ── Custom Color Controls ── */
+        .custom-color-panel {
+          margin-top: 14px;
+          padding: 16px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .custom-color-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+        .custom-picker-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .custom-picker-label {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .custom-input-wrap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .custom-color-input {
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          appearance: none;
+          width: 38px;
+          height: 38px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          background: transparent;
+          cursor: pointer;
+          padding: 0;
+          overflow: hidden;
+        }
+        .custom-color-input::-webkit-color-swatch-wrapper {
+          padding: 0;
+        }
+        .custom-color-input::-webkit-color-swatch {
+          border: none;
+          border-radius: calc(var(--radius-md) - 1px);
+        }
+        .custom-hex-input {
+          width: 90px;
+          height: 38px;
+          padding: 0 10px;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          background: var(--bg-elevated);
+          color: var(--text-primary);
+          font-family: monospace;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          text-transform: uppercase;
+        }
+        .custom-hex-input:focus {
+          outline: none;
+          border-color: var(--accent-purple);
+        }
+        .custom-preview-group {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .custom-live-preview {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 14px;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-default);
+          font-size: 0.75rem;
+          font-weight: 700;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .custom-ratio-tag {
+          font-size: 0.625rem;
+          opacity: 0.85;
+          padding: 2px 6px;
+          border-radius: var(--radius-pill);
+          background: rgba(0, 0, 0, 0.15);
+        }
+        .custom-color-reset {
+          background: transparent;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-pill);
+          color: var(--text-muted);
+          font: inherit;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          padding: 6px 12px;
+          cursor: pointer;
+          transition: color var(--transition-fast), border-color var(--transition-fast);
+        }
+        .custom-color-reset:hover {
+          color: var(--text-primary);
+          border-color: var(--border-default);
+        }
+        .custom-contrast-warn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          background: rgba(245, 158, 11, 0.12);
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          border-radius: var(--radius-md);
+          color: #f59e0b;
+          font-size: 0.6875rem;
+          line-height: 1.4;
+        }
+        .custom-presets {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .custom-presets-title {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .custom-swatches {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .custom-preset-pill {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 10px;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-pill);
+          color: var(--text-secondary);
+          font: inherit;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+        }
+        .custom-preset-pill:hover {
+          border-color: var(--border-default);
+          color: var(--text-primary);
+        }
+        .custom-preset-pill.is-active {
+          border-color: var(--accent-purple);
+          background: var(--accent-purple-dim);
+          color: var(--text-primary);
+        }
+        .custom-preset-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          border: 1px solid rgba(0, 0, 0, 0.2);
+        }
+
         /* ── Drop zone ── */
         .drop-zone {
           display: flex;
@@ -871,8 +1217,9 @@ export function UploadZone({
           font-family: var(--font-display);
           font-weight: 700;
           font-size: clamp(1.25rem, 2.6vw, 1.75rem);
-          line-height: 1;
-          letter-spacing: -0.04em;
+          line-height: 1.2;
+          letter-spacing: -0.015em;
+          word-spacing: 0.12em;
           text-transform: uppercase;
           color: var(--text-primary);
           text-align: center;
