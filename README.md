@@ -196,7 +196,6 @@ SUPABASE_SECRET_KEY=sb_secret_...
 # SUPABASE_SERVICE_ROLE_KEY=eyJ...
 ```
 
-> ⚠️ **Never commit `.env.local`** — it's already in `.gitignore`.
 
 If any `NEXT_PUBLIC_FIREBASE_*` value is missing or blank, the app still builds and the
 landing page still renders: Google sign-in is disabled and `/dashboard` shows a
