@@ -1,3 +1,45 @@
+<p align="center">
+  <img src="public/noctra-logo.png" alt="Noctra logo" width="112" />
+</p>
+
+<h1 align="center">Noctra</h1>
+
+<p align="center">
+  <strong>Give your documents the dark mode they deserve.</strong><br />
+  A privacy-first document converter for comfortable reading, built for PDFs, Word documents and PowerPoint presentations.
+</p>
+
+<p align="center">
+  <a href="https://github.com/skandachandrashekar335-wq/Noctra-pdfconverter/actions/workflows/ci.yml"><img src="https://github.com/skandachandrashekar335-wq/Noctra-pdfconverter/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" alt="Next.js 16" />
+  <img src="https://img.shields.io/badge/TypeScript-5-blue?logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Privacy-first- browser--side-success" alt="Privacy first browser-side processing" />
+</p>
+
+<p align="center">
+  <a href="#what-noctra-does">Overview</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#local-setup">Setup</a> ·
+  <a href="#security-model">Security</a>
+</p>
+
+---
+
+## Screenshots
+
+The following captures are committed project screenshots from the restored UI audit set.
+
+| Convert | Library |
+| --- | --- |
+| ![Noctra conversion workspace](audit-screenshots/restored/1440x900-convert.png) | ![Noctra document library](audit-screenshots/restored/1440x900-library.png) |
+
+| Settings | Study |
+| --- | --- |
+| ![Noctra settings](audit-screenshots/restored/1440x900-settings.png) | ![Noctra study workspace](audit-screenshots/restored/1440x900-study.png) |
+
+---
+
 # Noctra
 
 > **Your documents were never designed for dark mode. Noctra was.**
