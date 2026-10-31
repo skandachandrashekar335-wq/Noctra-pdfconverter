@@ -13,7 +13,7 @@
   <a href="https://github.com/skandachandrashekar335-wq/Noctra-pdfconverter/actions/workflows/ci.yml"><img src="https://github.com/skandachandrashekar335-wq/Noctra-pdfconverter/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/TypeScript-5-blue?logo=typescript" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Privacy-first- browser--side-success" alt="Privacy first browser-side processing" />
+  <img src="https://img.shields.io/badge/Privacy--first-browser--side-success" alt="Privacy first browser-side processing" />
 </p>
 
 <p align="center">
