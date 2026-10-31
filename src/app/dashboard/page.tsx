@@ -39,16 +39,15 @@ function DashboardContent() {
   const refreshProviderStatuses = useCallback(() => {
     const headers: Record<string, string> = {};
     const local = typeof window !== "undefined" ? localStorage.getItem("noctra_custom_gemini_key") : null;
-    if (local && local.trim()) {
+    const hasKey = Boolean(local && local.trim());
+    if (hasKey && local) {
       headers["x-gemini-api-key"] = local.trim();
-      setCustomKeySaved(true);
-    } else {
-      setCustomKeySaved(false);
     }
 
     fetch("/api/study", { headers })
       .then((res) => res.json())
       .then((data) => {
+        setCustomKeySaved(hasKey);
         if (Array.isArray(data?.providers)) {
           setProviderStatuses(data.providers);
         }
