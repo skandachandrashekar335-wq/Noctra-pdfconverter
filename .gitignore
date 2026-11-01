@@ -43,6 +43,24 @@ firebase-adminsdk*.json
 
 # agent tooling artifacts — not part of the application
 .opencode/
+.kiro/
 .env*
 # …but the documented template is not a secret and must stay in the repo.
 !.env.example
+
+# Audit and agent-generated screenshot folders — binary-heavy, not application code
+audit-screenshots/
+
+# Agent verification scripts — transient tooling, not application code
+scripts/capture-*.mjs
+scripts/verify-*.mjs
+scripts/compare-*.mjs
+scripts/check-*.mjs
+scripts/debug-*.mjs
+scripts/inspect-*.mjs
+scripts/production-ai-fallback-audit.mjs
+scripts/test-study-gemini-*.mjs
+
+# Environment backup files
+*.bak
+*.bak-*

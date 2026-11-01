@@ -43,4 +43,37 @@ jobs:
         run: npm test
 
       - name: Production build
+        env:
+          # Minimal env for build — no real secrets. The build does not
+          # call AI providers; only runtime does.
+          NEXT_PUBLIC_FIREBASE_API_KEY: placeholder
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: placeholder.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: placeholder
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: placeholder.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          NEXT_PUBLIC_FIREBASE_APP_ID: 1:000000000000:web:placeholder
         run: npm run build
+
+  dependency-audit:
+    name: Dependency security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit (high severity only)
+        # Report high/critical vulnerabilities but do not fail the build — the
+        # project uses overrides for known transitive issues and `npm audit fix
+        # --force` would require breaking changes. Track findings here.
+        run: npm audit --audit-level=critical || true

@@ -1,0 +1,97 @@
+---
+name: Bug report
+description: Report a bug or unexpected behaviour in Noctra
+title: "bug: <short description>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much detail as you can.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+      placeholder: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step instructions to reproduce the behaviour.
+      placeholder: |
+        1. Go to '...'
+        2. Upload file '...'
+        3. Click on '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What actually happened? Include any error messages.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Affected feature
+      options:
+        - PDF dark-mode conversion
+        - PPTX dark-mode conversion
+        - Batch conversion
+        - AI Study (Study AI)
+        - Authentication / sign in
+        - Conversion history
+        - Dashboard / settings
+        - Privacy or Terms page
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: "e.g. Chrome 130, Safari 17, Firefox 128"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. macOS 15, Windows 11, Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, console output, or anything else that might help.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability (use GitHub Security Advisories for those).
+          required: true

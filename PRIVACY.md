@@ -1,49 +1,118 @@
 # Privacy Policy
 
-## Information We Collect
+**Effective date**: 2026-11-01  
+**Last updated**: 2026-11-01
 
-**Automatically collected**:
-- Browser type and device information
-- Approximate geographic location (derived from IP address)
-- Usage patterns (pages visited, features used, conversion frequency)
-- Conversion metadata (file type, page count, timestamps, success/failure)
-- AI study request metadata (task type, objective, provider used, whether fallback occurred)
+Noctra is a browser-first document conversion and AI study platform available at [https://noctra-pdfconverter.vercel.app](https://noctra-pdfconverter.vercel.app).
 
-**Provided by the user**:
-- Email address (Google sign-in profile data only)
-- Study material content (PDF, PPTX, DOCX files uploaded to the browser)
-- Explicit consent for AI study assistance
-- Account preferences (theme, conversion profile settings)
+This document explains what data Noctra collects, what stays on your device, and what is shared with third parties.
 
-## How We Use Information
+---
 
-- **Document conversion** — All processing occurs in the browser. Files are never uploaded to our servers unless the user explicitly initiates history storage.
-- **Study AI assistance** — When a user consents to study assistance, the selected AI provider receives the study passage text and request metadata. Providers process per their own agreements. No data is retained or used for training unless explicitly permitted.
-- **Conversion history** — Stored in Supabase, scoped to the authenticated user's account. Owner-scoped access controls prevent other users from viewing another user's history.
-- **Analytics** — Usage patterns are aggregated and kept minimal. IP addresses are approximate.
+## 1. Document Conversion — Entirely Local
 
-## Information Sharing
+**PDF and PPTX files are processed entirely inside your browser.**
 
-- **AI providers** — When study assistance is explicitly consented to, the selected provider receives the study request and passage text. Providers process per their own agreements.
-- **Supabase** — Conversion history, account preferences, and study metadata are stored in the user's Supabase account, owner-scoped.
-- **Legal compliance** — If required by law, we may disclose user information per a valid legal request.
+When you convert a document:
+- The file is read by your browser using the Web File API
+- The dark-mode transformation is applied locally using JavaScript (PDF.js + pdf-lib for PDF; JSZip for PPTX)
+- The output file is generated in your browser and offered for download
+- **No file bytes are transmitted to any server**
+- No file content is stored by Noctra
 
-## Data Retention
+This applies to all conversion features, including batch conversion.
 
-- **Browser-side conversions** — No data is persisted after the page session ends, unless the user explicitly saves to history.
-- **Supabase history** — Retained indefinitely unless the user deletes individual records or requests account deletion.
-- **Analytics** — Aggregated usage data is retained per standard web analytics practices.
+---
 
-## User Rights
+## 2. AI Study — Text Sent to AI Providers With Consent
 
-- Users may delete their conversion history from the dashboard at any time.
-- Users may revoke AI study consent at any time via the settings page.
-- Users may request account deletion; contact the maintainers through the private reporting path in SECURITY.md.
+When you use the AI Study feature:
 
-## Children's Privacy
+1. Noctra extracts text from your uploaded documents **locally in your browser**
+2. You are shown a consent prompt before any text is sent anywhere
+3. **Only after explicit consent**, the extracted text passages are sent to Noctra's server (`/api/study`), which forwards them to an AI provider
 
-Noctra is not directed to children under 13. We knowingly collect no data from children under 13.
+### AI Provider Sequence
 
-## Changes to this Policy
+Noctra uses a sequential fallback:
 
-Updates to the Privacy Policy will be posted with an revised effective date. Users are encouraged to review periodically.
+1. **Gemini Primary** (Google Gemini API, model: `gemini-3.5-flash`)
+2. **Gemini Secondary** (Google Gemini API, model: `gemini-flash-lite-latest`)
+3. **OpenRouter Free** (model: `nvidia/nemotron-3.5-lightning:free` or configured equivalent)
+
+If the primary provider is unavailable, Noctra automatically tries the next in sequence. The response identifies which provider was used.
+
+### What AI providers may receive
+
+- Extracted text passages from your study documents
+- The study objective (e.g., "Practice Quiz")
+- Your question (for AI Teacher conversations)
+
+### What AI providers do NOT receive
+
+- Your raw file bytes
+- Your account credentials
+- Personal information beyond what is in the study text
+
+### Third-party AI provider privacy
+
+Your text is processed under the privacy policies of Google (Gemini) and OpenRouter. Noctra does not have zero-data-retention agreements with these providers. Do not submit documents containing sensitive personal data, medical records, financial information, or confidential business information.
+
+---
+
+## 3. Authentication
+
+Authentication is handled by **Firebase Auth** (Google). When you create an account or sign in:
+- Firebase stores your email, authentication tokens, and account identifiers
+- Noctra's server verifies Firebase ID tokens to authorize history operations
+- Noctra does not store your password (Firebase manages credential hashing)
+
+---
+
+## 4. Conversion History
+
+For authenticated users, Noctra records conversion history in **Supabase**:
+- File name
+- File type
+- Conversion status
+- Timestamp
+
+**File content is never stored.** History is scoped to your user account and protected by row-level security.
+
+---
+
+## 5. Local Storage
+
+Noctra uses browser `localStorage` for:
+- Theme preference (dark/light/system)
+- Optional custom API key (if you configure Bring-Your-Own-Key)
+
+These values remain on your device and are not transmitted to Noctra's servers.
+
+---
+
+## 6. Cookies and Tracking
+
+Noctra does not use tracking cookies or analytics beyond what Vercel's hosting platform logs (standard server request logs including IP address and user-agent, retained per Vercel's privacy policy).
+
+---
+
+## 7. Data Deletion
+
+To delete your account and all associated history data:
+- Go to Dashboard → Settings → Delete Account
+- All Supabase history records associated with your account are permanently deleted
+
+---
+
+## 8. Contact
+
+For privacy questions, open an issue on [GitHub](https://github.com/skandachandrashekar335-wq/Noctra-pdfconverter/issues) with the `privacy` label.
+
+For security vulnerabilities, use [GitHub Security Advisories](https://github.com/skandachandrashekar335-wq/Noctra-pdfconverter/security/advisories/new).
+
+---
+
+## 9. Changes to This Policy
+
+This policy may be updated when the implementation changes. The effective date at the top of this document reflects the most recent revision. Continued use of Noctra after changes constitutes acceptance.

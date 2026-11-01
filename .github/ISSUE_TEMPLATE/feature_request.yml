@@ -1,0 +1,67 @@
+---
+name: Feature request
+description: Propose a new feature or improvement for Noctra
+title: "feat: <short description>"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Please fill in the details below.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: What problem does this feature solve? What limitation are you hitting?
+      placeholder: "I'm trying to... but currently..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the feature you'd like to see and how it should work.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative approaches or workarounds you've considered.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature area
+      options:
+        - PDF conversion
+        - PPTX conversion
+        - Batch conversion
+        - AI Study / Study AI
+        - Authentication
+        - History and library
+        - Dashboard / UI
+        - Performance
+        - Accessibility
+        - Documentation
+        - Developer experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, screenshots, links, or any other context.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true

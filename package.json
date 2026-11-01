@@ -1,6 +1,26 @@
 {
   "name": "noctra-app",
   "version": "0.1.0",
+  "description": "Noctra — browser-first dark-mode document conversion and AI-powered study assistant",
+  "author": "skandachandrashekar335",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skandachandrashekar335-wq/Noctra-pdfconverter.git"
+  },
+  "homepage": "https://noctra-pdfconverter.vercel.app",
+  "keywords": [
+    "nextjs",
+    "typescript",
+    "pdf",
+    "pptx",
+    "dark-mode",
+    "document-converter",
+    "ai-study-assistant",
+    "gemini",
+    "openrouter",
+    "education",
+    "browser-processing"
+  ],
   "private": true,
   "scripts": {
     "dev": "next dev",

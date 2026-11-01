@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 10
+    groups:
+      # Group patch-level updates to reduce PR noise
+      patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    ignore:
+      # firebase-admin has a history of breaking changes in minors
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
+      # next.js major updates require careful migration
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Kolkata
+    labels:
+      - "dependencies"
+      - "github-actions"
